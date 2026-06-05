@@ -22,6 +22,25 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     CLAUDE_MODEL: str = "claude-sonnet-4-20250514"
 
+    # LLM provider selector: anthropic | groq | gemini | openai | ollama
+    LLM_PROVIDER: str = "anthropic"
+
+    # Groq (free tier — recommended for hackathon demo)
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+
+    # Google Gemini (free tier)
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-1.5-flash"
+
+    # OpenAI
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
+
+    # Ollama (local, free)
+    OLLAMA_BASE_URL: str = "http://host.docker.internal:11434"
+    OLLAMA_MODEL: str = "llama3.2"
+
     # SendGrid
     SENDGRID_API_KEY: str = ""
     SENDGRID_FROM_EMAIL: str = "outreach@example.com"

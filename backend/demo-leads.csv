@@ -1,6 +1,16 @@
 email,first_name,last_name,job_title,seniority_level,company_name,company_domain,industry,linkedin_url,phone,employee_count
-emily.foster@northwind.com,Emily,Foster,VP of Marketing,VP,Northwind Analytics,northwind.com,SaaS,https://linkedin.com/in/emily-foster-demo,+1-415-555-0201,150
-ravi.kumar@stratiq.io,Ravi,Kumar,Head of Sales,Director,Stratiq,stratiq.io,FinTech,https://linkedin.com/in/ravi-kumar-demo,,90
-jordan.lee@quantumleap.dev,Jordan,Lee,Engineering Manager,Manager,QuantumLeap,quantumleap.dev,Developer Tools,https://linkedin.com/in/jordan-lee-demo,,250
-amelia.tran@rooted.co,Amelia,Tran,Founder,C-Level,Rooted,rooted.co,Marketplace,https://linkedin.com/in/amelia-tran-demo,+1-628-555-0303,45
-diego.morales@payvault.com,Diego,Morales,Director of Operations,Director,PayVault,payvault.com,FinTech,https://linkedin.com/in/diego-morales-demo,,180
+marcus.johnson@clay.com,Marcus,Johnson,VP of Sales,VP,Clay,clay.com,Sales Intelligence,https://linkedin.com/in/marcus-johnson-demo,+1-555-0142,150
+priya.sharma@mercury.com,Priya,Sharma,Head of Revenue,Director,Mercury,mercury.com,FinTech,https://linkedin.com/in/priya-sharma-demo,,420
+david.chen@linear.app,David,Chen,Director of Marketing,Director,Linear,linear.app,Developer Tools,https://linkedin.com/in/david-chen-demo,+1-555-0167,110
+sarah.williams@hex.tech,Sarah,Williams,Founder & CEO,C-Level,Hex,hex.tech,Data Analytics,https://linkedin.com/in/sarah-williams-demo,+1-555-0189,120
+james.patel@posthog.com,James,Patel,Head of Growth,Director,PostHog,posthog.com,Product Analytics,https://linkedin.com/in/james-patel-demo,,85
+emily.rodriguez@vercel.com,Emily,Rodriguez,VP of Marketing,VP,Vercel,vercel.com,Developer Tools,https://linkedin.com/in/emily-rodriguez-demo,+1-555-0211,350
+michael.thompson@retool.com,Michael,Thompson,Director of Sales,Director,Retool,retool.com,Developer Tools,https://linkedin.com/in/michael-thompson-demo,,400
+anika.reddy@pinecone.io,Anika,Reddy,Chief Revenue Officer,C-Level,Pinecone,pinecone.io,AI Infrastructure,https://linkedin.com/in/anika-reddy-demo,+1-555-0234,210
+ryan.obrien@modal.com,Ryan,O'Brien,VP of Demand Generation,VP,Modal Labs,modal.com,AI Infrastructure,https://linkedin.com/in/ryan-obrien-demo,,75
+olivia.martinez@statsig.com,Olivia,Martinez,Head of Sales,Director,Statsig,statsig.com,Feature Flags,https://linkedin.com/in/olivia-martinez-demo,+1-555-0256,140
+daniel.kim@hightouch.com,Daniel,Kim,Director of Marketing,Director,Hightouch,hightouch.com,Data Activation,https://linkedin.com/in/daniel-kim-demo,,130
+sophia.nguyen@usepylon.com,Sophia,Nguyen,VP of Revenue,VP,Pylon,usepylon.com,Customer Success,https://linkedin.com/in/sophia-nguyen-demo,+1-555-0278,55
+lucas.garcia@getdbt.com,Lucas,Garcia,Senior Director of Sales,Director,dbt Labs,getdbt.com,Data Infrastructure,https://linkedin.com/in/lucas-garcia-demo,+1-555-0299,450
+maya.krishnan@replicate.com,Maya,Krishnan,Head of Marketing,Director,Replicate,replicate.com,Machine Learning,https://linkedin.com/in/maya-krishnan-demo,,65
+ethan.roberts@ramp.com,Ethan,Roberts,VP of Sales,VP,Ramp,ramp.com,FinTech,https://linkedin.com/in/ethan-roberts-demo,+1-555-0312,500

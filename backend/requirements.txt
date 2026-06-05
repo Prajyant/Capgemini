@@ -19,6 +19,10 @@ redis[hiredis]==5.2.0
 anthropic==0.39.0
 langchain==0.3.7
 langchain-anthropic==0.3.0
+langchain-openai==0.2.8
+langchain-groq==0.2.1
+langchain-google-genai==2.0.5
+langchain-ollama==0.2.0
 langchain-core==0.3.18
 langgraph==0.2.45
 

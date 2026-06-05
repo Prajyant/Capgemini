@@ -5,9 +5,8 @@ import json
 import logging
 from typing import Optional
 
-from langchain_anthropic import ChatAnthropic
-
 from app.config import settings
+from app.llm import get_llm, extract_text
 
 logger = logging.getLogger(__name__)
 
@@ -29,19 +28,12 @@ async def classify_reply(reply_text: str) -> dict:
         return {"sentiment": "neutral", "intent": "unknown", "confidence": 0.0, "summary": ""}
 
     try:
-        llm = ChatAnthropic(
-            model=settings.CLAUDE_MODEL,
-            max_tokens=400,
-            temperature=0.1,
-            api_key=settings.ANTHROPIC_API_KEY,
-        )
+        llm = get_llm(temperature=0.1, max_tokens=400)
         response = llm.invoke([
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": f"Reply text:\n\n{reply_text}"},
         ])
-        content = response.content
-        if isinstance(content, list):
-            content = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in content)
+        content = extract_text(response.content)
         content = content.strip()
         if content.startswith("```"):
             content = content.split("```")[1]

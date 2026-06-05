@@ -11,9 +11,9 @@ from datetime import datetime, timezone
 from typing import Any, Optional, TypedDict
 
 from langgraph.graph import StateGraph, END
-from langchain_anthropic import ChatAnthropic
 
 from app.config import settings
+from app.llm import get_llm, extract_text
 
 logger = logging.getLogger(__name__)
 
@@ -127,13 +127,8 @@ def _format_history(history: list, limit: int = 10) -> str:
 
 # ---------- Graph nodes ----------
 
-def _build_llm() -> ChatAnthropic:
-    return ChatAnthropic(
-        model=settings.CLAUDE_MODEL,
-        max_tokens=2000,
-        temperature=0.3,
-        api_key=settings.ANTHROPIC_API_KEY,
-    )
+def _build_llm():
+    return get_llm(temperature=0.3, max_tokens=2000)
 
 
 def observe_signals(state: LeadAgentState) -> LeadAgentState:
@@ -259,11 +254,7 @@ Reason carefully about this lead's situation, weigh the available actions, and d
             {"role": "user", "content": user_prompt},
         ])
         content = response.content
-        if isinstance(content, list):
-            content = "".join(
-                part.get("text", "") if isinstance(part, dict) else str(part)
-                for part in content
-            )
+        content = extract_text(content)
         # Strip code fences if present
         content = content.strip()
         if content.startswith("```"):

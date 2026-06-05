@@ -7,9 +7,8 @@ import json
 import logging
 from typing import Optional
 
-from langchain_anthropic import ChatAnthropic
-
 from app.config import settings
+from app.llm import get_llm, extract_text
 from app.utils.spam_scorer import check_spam_score
 
 logger = logging.getLogger(__name__)
@@ -94,16 +93,9 @@ Respond with valid JSON only (no markdown fences):
 }}"""
 
     try:
-        llm = ChatAnthropic(
-            model=settings.CLAUDE_MODEL,
-            max_tokens=1000,
-            temperature=0.7,
-            api_key=settings.ANTHROPIC_API_KEY,
-        )
+        llm = get_llm(temperature=0.7, max_tokens=1000)
         response = llm.invoke(prompt)
-        content = response.content
-        if isinstance(content, list):
-            content = "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in content)
+        content = extract_text(response.content)
         content = content.strip()
         if content.startswith("```"):
             content = content.split("```")[1]
