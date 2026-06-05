@@ -1,5 +1,4 @@
 """Reasoning-related Celery tasks."""
-import asyncio
 import logging
 from datetime import datetime, timezone
 from uuid import UUID
@@ -10,6 +9,7 @@ from app.agent.decision_maker import reason_for_lead
 from app.database import get_db_context
 from app.models import Lead
 from app.tasks.celery_app import celery_app
+from app.tasks.loop_helper import run_async
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 @celery_app.task(name="app.tasks.reasoning_tasks.reason_for_lead_task")
 def reason_for_lead_task(lead_id: str, auto_execute: bool = False) -> dict:
     """Run reasoning for a single lead in the background."""
-    return asyncio.run(_run(lead_id, auto_execute))
+    return run_async(_run(lead_id, auto_execute))
 
 
 async def _run(lead_id: str, auto_execute: bool) -> dict:
@@ -34,7 +34,7 @@ async def _run(lead_id: str, auto_execute: bool) -> dict:
 @celery_app.task(name="app.tasks.reasoning_tasks.process_due_leads")
 def process_due_leads() -> dict:
     """Find leads whose next_action_at has passed and reason about them."""
-    return asyncio.run(_process_due())
+    return run_async(_process_due())
 
 
 async def _process_due() -> dict:

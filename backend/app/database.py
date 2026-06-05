@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 from app.config import settings
 
@@ -17,6 +18,7 @@ class Base(DeclarativeBase):
     pass
 
 
+# FastAPI engine — single long-lived event loop, pooled connections are safe
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
@@ -45,16 +47,31 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 @asynccontextmanager
 async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
-    """Context manager for use outside FastAPI request scope (Celery tasks, scripts)."""
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+    """
+    Context manager for use OUTSIDE the FastAPI request scope (Celery tasks, scripts).
+
+    Creates a fresh engine with NullPool per call so connections never leak
+    across event loops. Celery's `asyncio.run()` creates a new loop per task,
+    and a shared pooled engine would bind connections to a closed loop and crash.
+    """
+    task_engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=False,
+        poolclass=NullPool,
+    )
+    SessionFactory = async_sessionmaker(
+        task_engine, class_=AsyncSession, expire_on_commit=False
+    )
+    try:
+        async with SessionFactory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+    finally:
+        await task_engine.dispose()
 
 
 async def init_db() -> None:
