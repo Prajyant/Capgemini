@@ -1,0 +1,6 @@
+email,first_name,last_name,job_title,seniority_level,company_name,company_domain,industry,linkedin_url,phone,employee_count
+emily.foster@northwind.com,Emily,Foster,VP of Marketing,VP,Northwind Analytics,northwind.com,SaaS,https://linkedin.com/in/emily-foster-demo,+1-415-555-0201,150
+ravi.kumar@stratiq.io,Ravi,Kumar,Head of Sales,Director,Stratiq,stratiq.io,FinTech,https://linkedin.com/in/ravi-kumar-demo,,90
+jordan.lee@quantumleap.dev,Jordan,Lee,Engineering Manager,Manager,QuantumLeap,quantumleap.dev,Developer Tools,https://linkedin.com/in/jordan-lee-demo,,250
+amelia.tran@rooted.co,Amelia,Tran,Founder,C-Level,Rooted,rooted.co,Marketplace,https://linkedin.com/in/amelia-tran-demo,+1-628-555-0303,45
+diego.morales@payvault.com,Diego,Morales,Director of Operations,Director,PayVault,payvault.com,FinTech,https://linkedin.com/in/diego-morales-demo,,180

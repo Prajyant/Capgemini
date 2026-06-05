@@ -1,0 +1,26 @@
+# Production overrides — use with: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up
+services:
+  frontend:
+    command: sh -c "npm run build && npm start"
+    environment:
+      - NODE_ENV=production
+    volumes: []
+
+  backend:
+    environment:
+      - ENVIRONMENT=production
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+    volumes: []
+    restart: unless-stopped
+
+  celery_worker:
+    restart: unless-stopped
+
+  celery_beat:
+    restart: unless-stopped
+
+  db:
+    restart: unless-stopped
+
+  redis:
+    restart: unless-stopped
