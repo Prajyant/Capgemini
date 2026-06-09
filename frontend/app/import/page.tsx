@@ -41,19 +41,36 @@ export default function ImportPage() {
 
       {tab === "crm" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="card">
-            <div className="font-semibold mb-1">HubSpot</div>
-            <div className="text-xs text-textMuted mb-3">
-              Sync contacts and companies from your HubSpot account.
+          <div className="card opacity-90">
+            <div className="flex items-center justify-between mb-1">
+              <div className="font-semibold">HubSpot</div>
+              <span className="badge bg-surface2 border border-border text-textMuted">
+                Coming soon
+              </span>
             </div>
-            <button className="btn-primary w-full">Connect HubSpot</button>
+            <div className="text-xs text-textMuted mb-3">
+              Sync contacts and companies from your HubSpot account. Set
+              HUBSPOT_CLIENT_ID and HUBSPOT_CLIENT_SECRET in your .env to enable.
+            </div>
+            <button className="btn-ghost w-full" disabled>
+              Connect HubSpot
+            </button>
           </div>
-          <div className="card">
-            <div className="font-semibold mb-1">Salesforce</div>
-            <div className="text-xs text-textMuted mb-3">
-              Import leads and accounts from Salesforce.
+          <div className="card opacity-90">
+            <div className="flex items-center justify-between mb-1">
+              <div className="font-semibold">Salesforce</div>
+              <span className="badge bg-surface2 border border-border text-textMuted">
+                Coming soon
+              </span>
             </div>
-            <button className="btn-primary w-full">Connect Salesforce</button>
+            <div className="text-xs text-textMuted mb-3">
+              Import leads and accounts from Salesforce. Set
+              SALESFORCE_CLIENT_ID and SALESFORCE_CLIENT_SECRET in your .env to
+              enable.
+            </div>
+            <button className="btn-ghost w-full" disabled>
+              Connect Salesforce
+            </button>
           </div>
         </div>
       )}

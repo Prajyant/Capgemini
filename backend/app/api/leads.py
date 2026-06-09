@@ -174,10 +174,13 @@ async def list_leads(
         stmt = stmt.where(Lead.state == state)
     if search:
         like = f"%{search.lower()}%"
-        stmt = stmt.where(
+        # Match lead fields plus company name (left-join keeps leads with no company).
+        stmt = stmt.outerjoin(Company, Lead.company_id == Company.id).where(
             func.lower(Lead.email).like(like)
             | func.lower(Lead.first_name).like(like)
             | func.lower(Lead.last_name).like(like)
+            | func.lower(Lead.job_title).like(like)
+            | func.lower(Company.name).like(like)
         )
     leads = (await db.execute(stmt)).scalars().all()
     return list(leads)
@@ -189,6 +192,34 @@ async def get_lead(lead_id: UUID, db: AsyncSession = Depends(get_db)):
     if not lead:
         raise HTTPException(404, "Lead not found")
     return lead
+
+
+@router.get("/{lead_id}/events")
+async def get_lead_events(lead_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Return the buyer-side email engagement timeline for one lead."""
+    lead = (await db.execute(select(Lead).where(Lead.id == lead_id))).scalar_one_or_none()
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+    events = sorted(
+        lead.email_events or [],
+        key=lambda e: e.occurred_at or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+    return [
+        {
+            "id": str(e.id),
+            "event_type": e.event_type,
+            "channel": e.channel,
+            "subject": e.subject,
+            "ab_variant": e.ab_variant,
+            "clicked_url": e.clicked_url,
+            "reply_content": e.reply_content,
+            "reply_sentiment": e.reply_sentiment,
+            "reply_intent": e.reply_intent,
+            "occurred_at": e.occurred_at.isoformat() if e.occurred_at else None,
+        }
+        for e in events
+    ]
 
 
 @router.put("/{lead_id}/state", response_model=LeadOut)

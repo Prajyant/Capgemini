@@ -57,19 +57,41 @@ export function LeadEnrichmentView({ lead }: { lead: Lead }) {
             <span className="text-textMuted text-sm">Intent Score</span>
             <span className="text-2xl font-bold text-success">{intent.intent_score ?? company?.intent_score ?? 0}</span>
           </div>
-          {intent.funding_recent && (
-            <div className="badge bg-success/15 text-success border border-success/30">
-              Recent funding
-            </div>
-          )}
-          {intent.hiring_count > 0 && (
-            <div className="badge bg-warning/15 text-warning border border-warning/30 ml-1">
-              Hiring · {intent.hiring_count} roles
-            </div>
-          )}
+          <div className="flex flex-wrap gap-1">
+            {intent.funding_recent && (
+              <span className="badge bg-success/15 text-success border border-success/30">
+                Recent funding
+              </span>
+            )}
+            {intent.hiring_count > 0 && (
+              <span className="badge bg-warning/15 text-warning border border-warning/30">
+                Hiring · {intent.hiring_count} signal{intent.hiring_count === 1 ? "" : "s"}
+              </span>
+            )}
+            {(intent.engagement_signals || []).map((s: string) => (
+              <span
+                key={s}
+                className="badge bg-accent/15 text-accent border border-accent/30 capitalize"
+              >
+                {s.replace(/_/g, " ")}
+              </span>
+            ))}
+          </div>
           {intent.tech_replacement_signals?.length > 0 && (
-            <div className="mt-2 text-xs text-textMuted">
+            <div className="text-xs text-textMuted">
               Replaceable tech: {intent.tech_replacement_signals.join(", ")}
+            </div>
+          )}
+          {(intent.reasons || []).length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs text-textMuted list-disc list-inside">
+              {intent.reasons.map((r: string, i: number) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+          )}
+          {(!intent.reasons || intent.reasons.length === 0) && (
+            <div className="text-xs text-textMuted italic">
+              No intent signals detected yet.
             </div>
           )}
         </div>

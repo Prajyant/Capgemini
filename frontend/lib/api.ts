@@ -25,6 +25,7 @@ export const api = {
     return request<any[]>(`/api/leads${q ? `?${q}` : ""}`);
   },
   getLead: (id: string) => request<any>(`/api/leads/${id}`),
+  getLeadEvents: (id: string) => request<any[]>(`/api/leads/${id}/events`),
   updateLeadState: (id: string, state: string) =>
     request<any>(`/api/leads/${id}/state`, {
       method: "PUT",
@@ -32,6 +33,16 @@ export const api = {
     }),
   enrichLead: (id: string) =>
     request<any>(`/api/leads/${id}/enrich`, { method: "POST" }),
+
+  simulateInboundReply: (payload: {
+    from_email: string;
+    subject?: string;
+    body: string;
+  }) =>
+    request<any>("/api/webhooks/reply", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 
   importCsv: async (file: File) => {
     const form = new FormData();
@@ -66,6 +77,22 @@ export const api = {
 
   // Sequences
   listSequences: () => request<any[]>("/api/sequences"),
+  createSequence: (payload: {
+    name: string;
+    vertical?: string | null;
+    total_steps: number;
+    steps: Array<{
+      step_number: number;
+      channel: string;
+      subject_template?: string | null;
+      body_template?: string | null;
+      wait_days: number;
+    }>;
+  }) =>
+    request<any>("/api/sequences", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   getEmailsForLead: (sequenceId: string, leadId: string) =>
     request<any>(`/api/sequences/${sequenceId}/emails/${leadId}`),
 
@@ -79,6 +106,9 @@ export const api = {
   agentPerformance: () => request<any>("/api/analytics/agent-performance"),
   activityFeed: (limit = 30) =>
     request<any[]>(`/api/analytics/activity-feed?limit=${limit}`),
+
+  // Settings
+  settingsStatus: () => request<any>("/api/settings/status"),
 };
 
 export const SSE_URL = `${BASE}/api/stream/activity`;

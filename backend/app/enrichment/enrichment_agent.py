@@ -83,7 +83,13 @@ async def enrich_lead(db: AsyncSession, lead_id: UUID) -> dict:
     news = results[1] if not isinstance(results[1], Exception) else []
     tech = results[2] if not isinstance(results[2], Exception) else []
 
-    intent = await derive_intent_signals(company_name, news, tech)
+    intent = await derive_intent_signals(
+        company_name,
+        news,
+        tech,
+        seniority_level=lead.seniority_level,
+        engagement_events=lead.email_events or [],
+    )
 
     lead.linkedin_signals = linkedin
     lead.company_news = news
@@ -130,3 +136,28 @@ async def enrich_lead(db: AsyncSession, lead_id: UUID) -> dict:
 
 async def _empty_list():
     return []
+
+
+async def recompute_intent_for_lead(db: AsyncSession, lead: Lead) -> dict:
+    """
+    Re-derive intent signals for a lead using the latest engagement history.
+
+    Used by webhooks after a buyer-side event (open/click/reply) so the buying
+    intent score reflects what the buyer actually does, not just static news.
+    Caller is responsible for committing.
+    """
+    company = lead.company
+    news = lead.company_news or (company.recent_news if company else None) or []
+    tech = lead.tech_stack or (company.tech_stack if company else None) or []
+
+    intent = await derive_intent_signals(
+        company.name if company else None,
+        news,
+        tech,
+        seniority_level=lead.seniority_level,
+        engagement_events=lead.email_events or [],
+    )
+    lead.intent_signals = intent
+    if company:
+        company.intent_score = intent.get("intent_score", 0)
+    return intent

@@ -50,4 +50,10 @@ html, body {
   .badge {
     @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
   }
+  .input {
+    @apply w-full bg-bg border border-border rounded-md px-3 py-1.5 text-sm
+           text-textPrimary placeholder:text-textMuted/60
+           focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent
+           disabled:opacity-60 disabled:cursor-not-allowed;
+  }
 }

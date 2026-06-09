@@ -2,12 +2,14 @@
 import logging
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.enrichment.enrichment_agent import recompute_intent_for_lead
 from app.models import EmailEvent, Lead
 from app.nlp.reply_classifier import classify_reply
 from app.redis_client import publish_event, push_activity
@@ -29,6 +31,9 @@ _EVENT_MAP = {
     "processed": "processed",
 }
 
+# Buyer-side actions that should refresh the buying-intent score
+_INTENT_REFRESH_EVENTS = {"opened", "clicked", "replied", "bounced", "unsubscribed"}
+
 
 @router.post("/sendgrid")
 async def sendgrid_events(request: Request, db: AsyncSession = Depends(get_db)):
@@ -38,6 +43,9 @@ async def sendgrid_events(request: Request, db: AsyncSession = Depends(get_db)):
         payload = [payload]
 
     processed = 0
+    affected_leads: dict[UUID, Lead] = {}
+    needs_intent_refresh: set[UUID] = set()
+
     for evt in payload:
         sg_event = evt.get("event")
         message_id = evt.get("sg_message_id") or evt.get("smtp-id")
@@ -47,7 +55,6 @@ async def sendgrid_events(request: Request, db: AsyncSession = Depends(get_db)):
         if not to_email:
             continue
 
-        # Find lead by email
         lead = (await db.execute(select(Lead).where(Lead.email == to_email))).scalar_one_or_none()
         if not lead:
             continue
@@ -62,7 +69,9 @@ async def sendgrid_events(request: Request, db: AsyncSession = Depends(get_db)):
             clicked_url=clicked_url,
             occurred_at=datetime.now(timezone.utc),
         )
-        db.add(new_event)
+        # Append to the relationship so the in-memory list stays in sync for
+        # the intent recompute below — db.add alone wouldn't update it.
+        lead.email_events.append(new_event)
 
         # State machine update
         now = datetime.now(timezone.utc)
@@ -82,6 +91,9 @@ async def sendgrid_events(request: Request, db: AsyncSession = Depends(get_db)):
             lead.state_updated_at = now
 
         processed += 1
+        affected_leads[lead.id] = lead
+        if event_type in _INTENT_REFRESH_EVENTS:
+            needs_intent_refresh.add(lead.id)
 
         try:
             activity = {
@@ -95,6 +107,15 @@ async def sendgrid_events(request: Request, db: AsyncSession = Depends(get_db)):
             await publish_event("email.events", activity)
         except Exception:
             pass
+
+    # Re-derive buying intent for leads with new engagement
+    for lead_id in needs_intent_refresh:
+        lead = affected_leads.get(lead_id)
+        if lead is not None:
+            try:
+                await recompute_intent_for_lead(db, lead)
+            except Exception as e:
+                logger.warning("Intent recompute failed for %s: %s", lead_id, e)
 
     await db.flush()
     return {"processed": processed}
@@ -111,13 +132,14 @@ async def inbound_reply(request: Request, db: AsyncSession = Depends(get_db)):
     body_data = await request.json()
     from_email = body_data.get("from_email")
     reply_text = body_data.get("body", "")
+    subject = body_data.get("subject")
 
     if not from_email:
-        return {"error": "from_email required"}, 400
+        raise HTTPException(status_code=400, detail="from_email required")
 
     lead = (await db.execute(select(Lead).where(Lead.email == from_email))).scalar_one_or_none()
     if not lead:
-        return {"error": "lead not found"}, 404
+        raise HTTPException(status_code=404, detail="lead not found")
 
     classification = await classify_reply(reply_text)
 
@@ -126,12 +148,14 @@ async def inbound_reply(request: Request, db: AsyncSession = Depends(get_db)):
         lead_id=lead.id,
         event_type="replied",
         channel="email",
+        subject=subject,
         reply_content=reply_text,
         reply_sentiment=classification.get("sentiment"),
         reply_intent=classification.get("intent"),
         occurred_at=now,
     )
-    db.add(event)
+    # Keep the in-memory relationship in sync for the intent recompute.
+    lead.email_events.append(event)
 
     # Update lead state
     intent = classification.get("intent", "")
@@ -144,6 +168,12 @@ async def inbound_reply(request: Request, db: AsyncSession = Depends(get_db)):
     else:
         lead.state = "replied"
     lead.state_updated_at = now
+
+    # Reply is the strongest possible buying-intent signal — refresh score.
+    try:
+        await recompute_intent_for_lead(db, lead)
+    except Exception as e:
+        logger.warning("Intent recompute on reply failed for %s: %s", lead.id, e)
 
     await db.flush()
 
