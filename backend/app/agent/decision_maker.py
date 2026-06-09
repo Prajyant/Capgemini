@@ -157,19 +157,54 @@ def _channel_for(decision_type: Optional[str]) -> Optional[str]:
 
 
 async def _apply_decision(db: AsyncSession, lead: Lead, result: dict) -> None:
-    """Apply the decision side-effects to the lead's state."""
+    """Apply the decision side-effects — including actually sending emails."""
     decision = result.get("decision")
     now = datetime.now(timezone.utc)
+
     if decision == "send_email":
-        # Defer to outreach.email_sender — here we just mark contacted.
-        lead.state = "contacted"
-        lead.state_updated_at = now
+        hooks = result.get("personalisation_hooks") or []
+        try:
+            from app.outreach.sequence_generator import generate_personalised_email
+            from app.outreach.email_sender import send_email
+            from app.agent.decision_maker import _serialize_lead
+
+            # Determine email step (intro / follow_up / breakup)
+            emails_sent = sum(
+                1 for e in (lead.email_events or [])
+                if e.event_type == "sent"
+            )
+            seq_types = ["intro", "follow_up", "breakup"]
+            seq_type = seq_types[min(emails_sent, 2)]
+
+            profile = _serialize_lead(lead)
+            email_data = await generate_personalised_email(
+                lead=profile,
+                step_number=emails_sent + 1,
+                sequence_type=seq_type,
+                personalisation_hooks=hooks,
+                ab_variant="A" if emails_sent % 2 == 0 else "B",
+            )
+            await send_email(
+                db=db,
+                lead=lead,
+                subject=email_data.get("subject", "Following up"),
+                body=email_data.get("body", ""),
+                ab_variant=email_data.get("ab_variant", "A"),
+            )
+        except Exception as e:
+            logger.exception("Email send failed during decision execution: %s", e)
+            lead.state = "contacted"
+            lead.state_updated_at = now
+
     elif decision == "send_linkedin_dm":
+        # LinkedIn DMs are surfaced to the SDR as a suggested action
         lead.state = "contacted"
         lead.state_updated_at = now
+
     elif decision == "wait":
         wait_days = int(result.get("next_wait_days", 3))
         lead.next_action_at = now + timedelta(days=wait_days)
+
     elif decision == "close_sequence":
         lead.state = "closed"
         lead.state_updated_at = now

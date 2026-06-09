@@ -225,3 +225,95 @@ async def enrich_now(lead_id: UUID, db: AsyncSession = Depends(get_db)):
         raise HTTPException(404, "Lead not found")
     from app.enrichment.enrichment_agent import enrich_lead
     return await enrich_lead(db, lead_id)
+
+
+@router.post("/{lead_id}/simulate-engagement")
+async def simulate_engagement(
+    lead_id: UUID,
+    scenario: str = Query("opened", description="opened|clicked|replied_positive|replied_objection|replied_interested"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Simulate buyer-side engagement for demo/testing purposes.
+    This mimics what would happen when a recipient opens, clicks, or replies to an email.
+    In production this happens via SendGrid webhooks automatically.
+    """
+    from app.models import EmailEvent
+    from app.nlp.reply_classifier import classify_reply
+    from app.redis_client import push_activity, publish_event
+
+    lead = (await db.execute(select(Lead).where(Lead.id == lead_id))).scalar_one_or_none()
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+
+    now = datetime.now(timezone.utc)
+    events_added = []
+
+    if scenario == "opened":
+        evt = EmailEvent(
+            lead_id=lead.id, event_type="opened", channel="email", occurred_at=now
+        )
+        db.add(evt)
+        events_added.append("opened")
+        if lead.state == "contacted":
+            lead.state = "engaged"
+            lead.state_updated_at = now
+
+    elif scenario == "clicked":
+        # opened + clicked
+        for etype in ("opened", "clicked"):
+            evt = EmailEvent(
+                lead_id=lead.id, event_type=etype, channel="email",
+                clicked_url="https://salesagent.ai/demo" if etype == "clicked" else None,
+                occurred_at=now,
+            )
+            db.add(evt)
+            events_added.append(etype)
+        if lead.state in ("contacted", "engaged"):
+            lead.state = "engaged"
+            lead.state_updated_at = now
+
+    elif scenario in ("replied_positive", "replied_interested", "replied_objection"):
+        reply_texts = {
+            "replied_positive": "Hi, this sounds really interesting. Would love to learn more about how it works.",
+            "replied_interested": "Thanks for reaching out. We've been looking for something like this. Can we schedule a call this week?",
+            "replied_objection": "Thanks but we already have Outreach. We're pretty happy with it.",
+        }
+        reply_text = reply_texts.get(scenario, "")
+        classification = await classify_reply(reply_text)
+
+        evt = EmailEvent(
+            lead_id=lead.id, event_type="replied", channel="email",
+            reply_content=reply_text,
+            reply_sentiment=classification.get("sentiment"),
+            reply_intent=classification.get("intent"),
+            occurred_at=now,
+        )
+        db.add(evt)
+        events_added.append(f"replied ({classification.get('intent')})")
+        lead.state = "replied"
+        lead.state_updated_at = now
+
+    await db.flush()
+
+    try:
+        activity = {
+            "type": "email_event",
+            "lead_id": str(lead.id),
+            "lead_name": f"{lead.first_name or ''} {lead.last_name or ''}".strip(),
+            "event": scenario,
+            "timestamp": now.isoformat(),
+        }
+        await push_activity(activity)
+        await publish_event("email.events", activity)
+    except Exception:
+        pass
+
+    return {
+        "lead_id": str(lead.id),
+        "scenario": scenario,
+        "events_added": events_added,
+        "new_state": lead.state,
+        "message": f"Simulated {scenario} for {lead.first_name} {lead.last_name}. "
+                   "Run agent reasoning to see how it reacts to this engagement signal.",
+    }

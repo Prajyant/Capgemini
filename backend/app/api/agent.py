@@ -85,9 +85,27 @@ async def approve_decision(decision_id: UUID, db: AsyncSession = Depends(get_db)
     )).scalar_one_or_none()
     if not decision:
         raise HTTPException(404, "Decision not found")
+
     decision.was_approved = True
     decision.approved_by = "human"
     decision.executed_at = datetime.now(timezone.utc)
+
+    # Actually execute the action
+    lead = (await db.execute(
+        select(Lead).where(Lead.id == decision.lead_id)
+    )).scalar_one_or_none()
+    if lead and decision.decision_type not in ("escalate_to_human", "wait", "close_sequence"):
+        try:
+            from app.agent.decision_maker import _apply_decision
+            result = {
+                "decision": decision.decision_type,
+                "personalisation_hooks": (decision.full_reasoning or {}).get("email_personalisation_hooks", []),
+                "next_wait_days": (decision.full_reasoning or {}).get("next_wait_days", 3),
+            }
+            await _apply_decision(db, lead, result)
+        except Exception as e:
+            logger.exception("Failed to execute approved decision: %s", e)
+
     await db.flush()
     return decision
 

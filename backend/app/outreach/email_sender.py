@@ -1,4 +1,4 @@
-"""SendGrid email sending integration."""
+"""SendGrid email sending integration with dev-mode logging."""
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -22,6 +22,7 @@ async def send_email(
 ) -> Optional[EmailEvent]:
     """
     Send an email via SendGrid and record the event.
+    In dev mode (no API key), logs the email content so it's visible in docker logs.
     Returns the EmailEvent or None if blocked by compliance.
     """
     allowed, reason = can_send_to_lead(lead.opted_out, lead.state)
@@ -64,26 +65,48 @@ async def _send_via_sendgrid(
     body: str,
     to_name: Optional[str] = None,
 ) -> str:
-    """Send via SendGrid. Returns message ID. In dev mode without API key, returns mock ID."""
-    if not settings.SENDGRID_API_KEY:
-        logger.info("SENDGRID_API_KEY missing — mock send to %s", to_email)
-        return f"mock-{datetime.now(timezone.utc).timestamp()}"
+    """Send via SendGrid. Falls back to dev-mode logging if no API key."""
+    if not settings.SENDGRID_API_KEY or settings.SENDGRID_API_KEY in (
+        "your_sendgrid_key_here", ""
+    ):
+        # Dev mode: log the full email so it's visible / verifiable
+        separator = "=" * 60
+        logger.info(
+            "\n%s\n📧 DEV MODE EMAIL (would be sent via SendGrid)\n%s\n"
+            "TO:      %s <%s>\n"
+            "FROM:    %s <%s>\n"
+            "SUBJECT: %s\n"
+            "%s\n"
+            "%s\n"
+            "%s",
+            separator, separator,
+            to_name or "", to_email,
+            settings.SENDGRID_FROM_NAME, settings.SENDGRID_FROM_EMAIL,
+            subject,
+            "-" * 60,
+            body,
+            separator,
+        )
+        return f"dev-{datetime.now(timezone.utc).timestamp():.0f}"
 
     try:
         from sendgrid import SendGridAPIClient
-        from sendgrid.helpers.mail import Mail, From, To
+        from sendgrid.helpers.mail import Mail, From, To, Content
 
-        message = Mail(
-            from_email=From(settings.SENDGRID_FROM_EMAIL, settings.SENDGRID_FROM_NAME),
-            to_emails=To(to_email, to_name),
-            subject=subject,
-            plain_text_content=body,
-        )
+        message = Mail()
+        message.from_email = From(settings.SENDGRID_FROM_EMAIL, settings.SENDGRID_FROM_NAME)
+        message.to = [To(to_email, to_name)]
+        message.subject = subject
+        message.content = [Content("text/plain", body)]
+
         sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
         response = sg.send(message)
-        message_id = response.headers.get("X-Message-Id", f"sg-{datetime.now(timezone.utc).timestamp()}")
-        logger.info("Sent email to %s via SendGrid (msg=%s)", to_email, message_id)
+        message_id = response.headers.get(
+            "X-Message-Id",
+            f"sg-{datetime.now(timezone.utc).timestamp():.0f}"
+        )
+        logger.info("✅ Email sent to %s via SendGrid (id=%s)", to_email, message_id)
         return message_id
     except Exception as e:
-        logger.exception("SendGrid send failed: %s", e)
-        return f"failed-{datetime.now(timezone.utc).timestamp()}"
+        logger.exception("❌ SendGrid send failed for %s: %s", to_email, e)
+        return f"failed-{datetime.now(timezone.utc).timestamp():.0f}"

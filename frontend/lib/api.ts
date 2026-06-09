@@ -33,6 +33,9 @@ export const api = {
   enrichLead: (id: string) =>
     request<any>(`/api/leads/${id}/enrich`, { method: "POST" }),
 
+  simulateEngagement: (id: string, scenario: string) =>
+    request<any>(`/api/leads/${id}/simulate-engagement?scenario=${scenario}`, { method: "POST" }),
+
   importCsv: async (file: File) => {
     const form = new FormData();
     form.append("file", file);
@@ -69,6 +72,11 @@ export const api = {
   getEmailsForLead: (sequenceId: string, leadId: string) =>
     request<any>(`/api/sequences/${sequenceId}/emails/${leadId}`),
 
+  // CRM
+  crmStatus: () => request<{ hubspot: { connected: boolean; status: string }; salesforce: { connected: boolean; status: string } }>("/api/crm/status"),
+  crmDisconnect: (crm: "hubspot" | "salesforce") =>
+    request<{ status: string; crm: string }>(`/api/crm/${crm}/disconnect`, { method: "DELETE" }),
+
   // Analytics
   overview: () => request<any>("/api/analytics/overview"),
   weeklyReplyRate: (weeks = 8) =>
@@ -82,3 +90,5 @@ export const api = {
 };
 
 export const SSE_URL = `${BASE}/api/stream/activity`;
+export const BACKEND_URL = BASE;
+
