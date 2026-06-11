@@ -161,9 +161,15 @@ async def _apply_decision(db: AsyncSession, lead: Lead, result: dict) -> None:
     decision = result.get("decision")
     now = datetime.now(timezone.utc)
     if decision == "send_email":
-        # Defer to outreach.email_sender — here we just mark contacted.
-        lead.state = "contacted"
-        lead.state_updated_at = now
+        # Local import to avoid a circular import at module load time.
+        from app.outreach.email_sender import generate_and_send
+        hooks = (result.get("full_reasoning") or {}).get("email_personalisation_hooks") or []
+        try:
+            await generate_and_send(db, lead, personalisation_hooks=hooks)
+        except Exception as e:
+            logger.exception("Autopilot send failed for lead %s: %s", lead.id, e)
+        # send_email() will mark the lead contacted on success. If compliance
+        # blocked the send, leave the lead state alone.
     elif decision == "send_linkedin_dm":
         lead.state = "contacted"
         lead.state_updated_at = now

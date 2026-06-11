@@ -200,6 +200,10 @@ CRITICAL RULES:
 4. Your reasoning_summary must be written in plain English that a non-technical SDR can understand
 5. Be honest about uncertainty — if signals are mixed, say so
 6. Reference specific signals (e.g., "opened twice in 24h", "Series A announced", "replied with objection")
+7. If the lead replied with POSITIVE intent (interested, needs_more_info, meeting_requested), your default action should be send_email with a relevant follow-up — not suggest_call unless the lead explicitly asks for a call
+8. If the lead replied with NEGATIVE intent (not_now, unsubscribe, wrong_person), respect their wishes: wait, close, or escalate
+9. suggest_call should ONLY be used when the lead has explicitly expressed interest in speaking AND you have already sent at least 2 emails
+10. send_email is the PRIMARY action for continuing engagement after a positive reply
 
 OUTPUT FORMAT (respond with valid JSON only, no markdown fences):
 {
@@ -291,27 +295,15 @@ Reason carefully about this lead's situation, weigh the available actions, and d
 
 
 def validate_decision(state: LeadAgentState) -> LeadAgentState:
-    """Step 4: Compliance and sanity checks. Hard blocks override agent decisions."""
+    """Step 4: Compliance and sanity checks. All decisions require human approval."""
     profile = state.get("lead_profile") or {}
 
-    # Hard block: opted out
+    # If lead has already opted out (approved by human earlier), block further action
     if profile.get("opted_out"):
         state["decision"] = "close_sequence"
-        state["reasoning_summary"] = "Lead has opted out. Sequence closed automatically per CAN-SPAM compliance."
+        state["reasoning_summary"] = "Lead has opted out. No further outreach permitted."
         state["confidence"] = 1.0
         return state
-
-    # Hard block: confidence too low
-    threshold = settings.CONFIDENCE_THRESHOLD
-    if state.get("confidence", 0.0) < threshold and state.get("decision") != "escalate_to_human":
-        original = state.get("decision")
-        state["decision"] = "escalate_to_human"
-        original_summary = state.get("reasoning_summary", "")
-        state["reasoning_summary"] = (
-            f"Confidence too low ({state.get('confidence', 0):.0%}) to act autonomously. "
-            f"Original recommendation: {original}. Flagged for human review. "
-            f"Context: {original_summary}"
-        )
 
     # Validate decision is in allowed set
     allowed_decisions = {

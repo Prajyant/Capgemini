@@ -233,6 +233,9 @@ async def update_state(
         raise HTTPException(404, "Lead not found")
     lead.state = payload.state
     lead.state_updated_at = datetime.now(timezone.utc)
+    # Reset opt-out when state is manually changed back to active
+    if payload.state not in ("unsubscribed", "closed"):
+        lead.opted_out = False
     await db.flush()
     return lead
 
@@ -242,10 +245,13 @@ async def delete_lead(lead_id: UUID, db: AsyncSession = Depends(get_db)):
     lead = (await db.execute(select(Lead).where(Lead.id == lead_id))).scalar_one_or_none()
     if not lead:
         raise HTTPException(404, "Lead not found")
-    lead.opted_out = True
-    lead.opted_out_at = datetime.now(timezone.utc)
-    lead.state = "unsubscribed"
-    lead.state_updated_at = datetime.now(timezone.utc)
+    # Hard delete: remove all related events and decisions first
+    from app.models import EmailEvent, AgentDecision
+    await db.execute(select(EmailEvent).where(EmailEvent.lead_id == lead_id))
+    from sqlalchemy import delete as sql_delete
+    await db.execute(sql_delete(EmailEvent).where(EmailEvent.lead_id == lead_id))
+    await db.execute(sql_delete(AgentDecision).where(AgentDecision.lead_id == lead_id))
+    await db.delete(lead)
     await db.flush()
 
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { api, SSE_URL } from "@/lib/api";
 import { AgentDecision } from "@/lib/types";
 import { DecisionBadge, ConfidenceBar } from "@/components/shared/StatusBadge";
-import { formatRelative } from "@/lib/utils";
+import { formatRelative, leadDisplayName } from "@/lib/utils";
 import { Brain, Check, X } from "lucide-react";
 import Link from "next/link";
 
@@ -100,6 +100,20 @@ export function ActivityFeed() {
                     {formatRelative(d.created_at)}
                   </span>
                 </div>
+                <Link
+                  href={`/leads/${d.lead_id}`}
+                  className="block mb-2 group"
+                >
+                  <div className="text-xs font-semibold text-textPrimary group-hover:text-accent truncate">
+                    {leadDisplayName(d.lead)}
+                    {d.lead?.company_name && (
+                      <span className="text-textMuted font-normal"> · {d.lead.company_name}</span>
+                    )}
+                  </div>
+                  {d.lead?.job_title && (
+                    <div className="text-[10px] text-textMuted truncate">{d.lead.job_title}</div>
+                  )}
+                </Link>
                 <Link
                   href={`/leads/${d.lead_id}`}
                   className="text-xs text-textPrimary leading-relaxed hover:text-accent block mb-2"

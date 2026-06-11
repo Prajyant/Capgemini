@@ -9,6 +9,17 @@ export function formatRelative(dateStr?: string | null): string {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
   const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+  
+  // Future date
+  if (diff < 0) {
+    const absDiff = Math.abs(diff);
+    if (absDiff < 60) return `in ${absDiff}s`;
+    if (absDiff < 3600) return `in ${Math.floor(absDiff / 60)}m`;
+    if (absDiff < 86400) return `in ${Math.floor(absDiff / 3600)}h`;
+    return `in ${Math.floor(absDiff / 86400)}d`;
+  }
+  
+  // Past date
   if (diff < 60) return `${diff}s ago`;
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
@@ -48,3 +59,13 @@ export const DECISION_LABELS: Record<string, string> = {
   escalate_to_human: "Escalate",
   close_sequence: "Close",
 };
+
+export function leadDisplayName(lead?: {
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+}): string {
+  if (!lead) return "Unknown lead";
+  const full = `${lead.first_name || ""} ${lead.last_name || ""}`.trim();
+  return full || lead.email || "Unknown lead";
+}

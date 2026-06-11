@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse
 
 from app.api import agent, analytics, auth, leads, sequences, settings as settings_api, webhooks
+from app.api import inbox as inbox_api
 from app.config import settings
 from app.database import init_db
 from app.redis_client import get_redis
@@ -55,6 +56,7 @@ app.include_router(sequences.router)
 app.include_router(webhooks.router)
 app.include_router(analytics.router)
 app.include_router(settings_api.router)
+app.include_router(inbox_api.router)
 
 
 @app.get("/")

@@ -44,6 +44,16 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  simulateEvent: (payload: {
+    lead_id: string;
+    event_type: string;
+    clicked_url?: string;
+  }) =>
+    request<any>("/api/webhooks/simulate-event", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
   importCsv: async (file: File) => {
     const form = new FormData();
     form.append("file", file);
@@ -58,6 +68,8 @@ export const api = {
   // Agent
   decideForLead: (leadId: string) =>
     request<any>(`/api/agent/decide/${leadId}`, { method: "POST" }),
+  sendTestEmail: (leadId: string) =>
+    request<any>(`/api/agent/send-test/${leadId}`, { method: "POST" }),
   decideBatch: (limit = 20) =>
     request<any>(`/api/agent/decide/batch?limit=${limit}`, { method: "POST" }),
   listDecisions: (params: Record<string, string | number | boolean> = {}) => {
@@ -68,6 +80,8 @@ export const api = {
   },
   approveDecision: (id: string) =>
     request<any>(`/api/agent/decisions/${id}/approve`, { method: "POST" }),
+  previewEmail: (decisionId: string) =>
+    request<any>(`/api/agent/decisions/${decisionId}/preview-email`, { method: "POST" }),
   overrideDecision: (id: string, action: string) =>
     request<any>(`/api/agent/decisions/${id}/override?new_action=${action}`, {
       method: "POST",

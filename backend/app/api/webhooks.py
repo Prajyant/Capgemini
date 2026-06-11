@@ -160,9 +160,8 @@ async def inbound_reply(request: Request, db: AsyncSession = Depends(get_db)):
     # Update lead state
     intent = classification.get("intent", "")
     if intent == "unsubscribe":
-        lead.opted_out = True
-        lead.opted_out_at = now
-        lead.state = "unsubscribed"
+        # Don't auto-opt-out — flag for human review via reasoning
+        lead.state = "replied"
     elif intent in ("interested", "meeting_requested"):
         lead.state = "replied"
     else:
@@ -199,3 +198,74 @@ async def inbound_reply(request: Request, db: AsyncSession = Depends(get_db)):
         pass
 
     return {"status": "processed", "classification": classification}
+
+
+@router.post("/simulate-event")
+async def simulate_event(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    Simulate an email event (open, click, bounce, etc.) for local testing.
+
+    Expected payload:
+    { "lead_id": "uuid", "event_type": "opened|clicked|bounced|spam|unsubscribed", "clicked_url": "optional" }
+    """
+    body_data = await request.json()
+    lead_id = body_data.get("lead_id")
+    event_type = body_data.get("event_type", "opened")
+    clicked_url = body_data.get("clicked_url")
+
+    if not lead_id:
+        raise HTTPException(status_code=400, detail="lead_id required")
+
+    lead = (await db.execute(select(Lead).where(Lead.id == lead_id))).scalar_one_or_none()
+    if not lead:
+        raise HTTPException(status_code=404, detail="lead not found")
+
+    now = datetime.now(timezone.utc)
+    event = EmailEvent(
+        lead_id=lead.id,
+        event_type=event_type,
+        channel="email",
+        clicked_url=clicked_url if event_type == "clicked" else None,
+        occurred_at=now,
+    )
+    lead.email_events.append(event)
+
+    # Update lead state
+    if event_type == "opened" and lead.state == "contacted":
+        lead.state = "engaged"
+        lead.state_updated_at = now
+    elif event_type == "clicked" and lead.state in ("contacted", "engaged"):
+        lead.state = "engaged"
+        lead.state_updated_at = now
+    elif event_type == "unsubscribed":
+        lead.opted_out = True
+        lead.opted_out_at = now
+        lead.state = "unsubscribed"
+        lead.state_updated_at = now
+    elif event_type == "bounced":
+        lead.state = "closed"
+        lead.state_updated_at = now
+
+    # Refresh intent score
+    try:
+        await recompute_intent_for_lead(db, lead)
+    except Exception as e:
+        logger.warning("Intent recompute failed for %s: %s", lead.id, e)
+
+    await db.flush()
+
+    # Push to live feed
+    try:
+        activity = {
+            "type": "email_event",
+            "lead_id": str(lead.id),
+            "lead_name": f"{lead.first_name or ''} {lead.last_name or ''}".strip(),
+            "event": event_type,
+            "timestamp": now.isoformat(),
+        }
+        await push_activity(activity)
+        await publish_event("email.events", activity)
+    except Exception:
+        pass
+
+    return {"status": "simulated", "event_type": event_type, "lead_id": str(lead.id)}

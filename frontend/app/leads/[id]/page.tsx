@@ -57,6 +57,24 @@ export default function LeadDetail() {
     }
   };
 
+  const sendTestEmail = async () => {
+    setReasoning(true);
+    try {
+      const res = await api.sendTestEmail(id);
+      if (res.status === "sent") {
+        alert(`Email sent to ${res.to}\nSubject: ${res.subject}`);
+      } else {
+        alert(`Blocked: ${res.reason}`);
+      }
+      await load();
+    } catch (e) {
+      console.error(e);
+      alert("Send failed. Check backend logs.");
+    } finally {
+      setReasoning(false);
+    }
+  };
+
   if (loading) {
     return <div className="text-textMuted">Loading lead...</div>;
   }
@@ -130,12 +148,20 @@ export default function LeadDetail() {
               <Sparkles className="w-4 h-4" />
               {reasoning ? "Reasoning..." : "Run Agent Reasoning"}
             </button>
+            <button
+              onClick={sendTestEmail}
+              disabled={reasoning}
+              className="btn-ghost flex items-center gap-2 disabled:opacity-50 border border-accent text-accent"
+            >
+              <Mail className="w-4 h-4" />
+              Send Email Now
+            </button>
           </div>
         </div>
 
         {lead.next_action_at && (
           <div className="mt-4 pt-4 border-t border-border text-xs text-textMuted">
-            Next scheduled action: {formatRelative(lead.next_action_at)}
+            Next scheduled action: {new Date(lead.next_action_at).getTime() < Date.now() ? "Due now" : formatRelative(lead.next_action_at)}
           </div>
         )}
       </div>
@@ -156,6 +182,7 @@ export default function LeadDetail() {
         <LeadEngagementPanel
           events={events}
           leadEmail={lead.email}
+          leadId={id}
           onSimulated={load}
         />
       </section>
@@ -166,7 +193,7 @@ export default function LeadDetail() {
           <Brain className="w-4 h-4" />
           Agent Chain of Thought
         </h2>
-        <LeadStateTimeline decisions={decisions} />
+        <LeadStateTimeline decisions={decisions} onUpdate={load} />
       </section>
     </div>
   );

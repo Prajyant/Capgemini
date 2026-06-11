@@ -76,10 +76,18 @@ class Settings(BaseSettings):
     COMPANY_PHYSICAL_ADDRESS: str = "123 Demo Street, San Francisco, CA 94103"
     UNSUBSCRIBE_BASE_URL: str = "http://localhost:8000/unsubscribe"
 
+    # IMAP Inbox Reading
+    IMAP_HOST: str = ""
+    IMAP_PORT: int = 993
+    IMAP_USER: str = ""
+    IMAP_PASSWORD: str = ""
+
 
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
 
 
+# Clear cache so reloads pick up .env changes
+get_settings.cache_clear()
 settings = get_settings()

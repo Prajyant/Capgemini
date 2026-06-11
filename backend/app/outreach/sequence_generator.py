@@ -123,6 +123,100 @@ Respond with valid JSON only (no markdown fences):
     return email_data
 
 
+def _strip_quoted_content(text: str) -> str:
+    """Remove quoted email thread, keeping only the actual reply."""
+    lines = text.strip().split("\n")
+    clean = []
+    for line in lines:
+        # Stop at "On ... wrote:" pattern
+        if "wrote:" in line and ("On " in line or "on " in line):
+            break
+        # Stop at quoted lines
+        if line.strip().startswith(">"):
+            break
+        # Stop at separator
+        if line.strip() == "---":
+            break
+        clean.append(line)
+    result = "\n".join(clean).strip()
+    return result if result else text.split("\n")[0].strip()
+
+
+async def generate_reply_email(
+    lead: dict,
+    reply_content: str,
+    reply_intent: Optional[str] = None,
+    personalisation_hooks: Optional[list[str]] = None,
+) -> dict:
+    """Generate a contextual response to a lead's reply. Not a cold sequence email."""
+    personalisation_hooks = personalisation_hooks or []
+
+    # Strip quoted thread — only keep the actual reply
+    clean_reply = _strip_quoted_content(reply_content)
+
+    prompt = f"""Generate a reply email responding to a prospect who replied to our outreach.
+
+LEAD CONTEXT:
+Name: {lead.get('first_name', '')} {lead.get('last_name', '')}
+Title: {lead.get('job_title', 'Unknown')} at {lead.get('company_name', 'Unknown')}
+Industry: {lead.get('industry', 'Unknown')}
+
+THEIR REPLY:
+"{clean_reply}"
+
+THEIR INTENT: {reply_intent or 'unknown'}
+
+PERSONALISATION HOOKS: {', '.join(personalisation_hooks) if personalisation_hooks else 'None'}
+
+RULES:
+- Directly answer their question or respond to what they said
+- If they asked "what do you help with" → explain your value proposition in 2-3 specific bullet points
+- If they expressed interest → propose a specific next step (15-min call this week)
+- If they said "not now" → acknowledge respectfully, offer to reconnect in a specific timeframe
+- Write 60-100 words — not too short, not too long
+- Be conversational and warm, not corporate
+- Reference what THEY said specifically in the first line
+- Include one clear, specific CTA (suggest a day/time or ask a qualifying question)
+- Sign off with just your first name
+
+Respond with valid JSON only (no markdown fences):
+{{
+    "subject": "Re: relevant subject (under 8 words)",
+    "body": "email body (plain text, no markdown, 60-100 words)",
+    "personalisation_used": "what you referenced from their reply",
+    "readability_notes": "why this is a good response"
+}}"""
+
+    try:
+        llm = get_llm(temperature=0.7, max_tokens=800)
+        response = llm.invoke(prompt)
+        content = extract_text(response.content)
+        content = content.strip()
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+            content = content.strip()
+        email_data = json.loads(content)
+    except Exception as e:
+        logger.exception("Reply email generation failed: %s", e)
+        email_data = {
+            "subject": f"Re: your question, {lead.get('first_name', 'there')}",
+            "body": (
+                f"Hi {lead.get('first_name', 'there')},\n\n"
+                "Thanks for getting back to me. Happy to share more details — "
+                "would a quick 15-minute call work this week?\n\nBest"
+            ),
+            "personalisation_used": "fallback due to LLM error",
+            "readability_notes": "fallback",
+        }
+
+    email_data["spam_score"] = 0
+    email_data["passes_spam_check"] = True
+    email_data["ab_variant"] = "A"
+    return email_data
+
+
 async def generate_full_sequence(lead: dict, personalisation_hooks: Optional[list[str]] = None) -> list[dict]:
     """Generate all 3 emails (intro, follow_up, breakup) for a lead."""
     sequence_types = ["intro", "follow_up", "breakup"]

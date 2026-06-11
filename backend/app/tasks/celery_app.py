@@ -13,6 +13,7 @@ celery_app = Celery(
         "app.tasks.enrichment_tasks",
         "app.tasks.reasoning_tasks",
         "app.tasks.feedback_tasks",
+        "app.tasks.inbox_tasks",
     ],
 )
 
@@ -29,6 +30,10 @@ celery_app.conf.update(
 )
 
 celery_app.conf.beat_schedule = {
+    "poll-inbox-every-2min": {
+        "task": "app.tasks.inbox_tasks.poll_inbox",
+        "schedule": crontab(minute="*/2"),
+    },
     "process-due-leads-every-5min": {
         "task": "app.tasks.reasoning_tasks.process_due_leads",
         "schedule": crontab(minute="*/5"),

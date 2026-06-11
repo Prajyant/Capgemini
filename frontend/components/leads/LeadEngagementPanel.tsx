@@ -14,6 +14,26 @@ import {
 import { api } from "@/lib/api";
 import { formatRelative } from "@/lib/utils";
 
+/** Strip quoted email thread from reply — only show the actual reply text */
+function stripQuotedReply(content: string): string {
+  const lines = content.split("\n");
+  const cleanLines: string[] = [];
+  for (const line of lines) {
+    // Stop at "On ... wrote:" pattern (may span a line that just starts with "On")
+    if (/^On\s.+wrote:/.test(line.trim())) break;
+    if (/^On\s+(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/.test(line.trim())) break;
+    // Stop at "> " quoted lines
+    if (line.trim().startsWith(">")) break;
+    // Stop at "---" separator
+    if (line.trim() === "---") break;
+    // Stop at lines that look like email headers
+    if (/^(From|Sent|To|Subject|Date):/.test(line.trim())) break;
+    cleanLines.push(line);
+  }
+  const result = cleanLines.join("\n").trim();
+  return result || content.split("\n")[0]; // fallback to first line
+}
+
 export type EngagementEvent = {
   id: string;
   event_type: string;
@@ -44,20 +64,54 @@ const ICON_BY_TYPE: Record<
 export function LeadEngagementPanel({
   events,
   leadEmail,
+  leadId,
   onSimulated,
 }: {
   events: EngagementEvent[];
   leadEmail: string;
+  leadId: string;
   onSimulated?: () => void;
 }) {
+  const openCount = events.filter((e) => e.event_type === "opened").length;
+  const clickCount = events.filter((e) => e.event_type === "clicked").length;
+  const replyCount = events.filter((e) => e.event_type === "replied").length;
+  const sentCount = events.filter((e) => e.event_type === "sent").length;
+
   return (
     <div className="card">
+      {/* Engagement Stats */}
+      <div className="flex items-center gap-4 mb-4 pb-3 border-b border-border">
+        <div className="flex items-center gap-1.5 text-sm">
+          <Mail className="w-3.5 h-3.5 text-textMuted" />
+          <span className="font-semibold">{sentCount}</span>
+          <span className="text-textMuted text-xs">sent</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-sm">
+          <MailOpen className="w-3.5 h-3.5 text-success" />
+          <span className="font-semibold">{openCount}</span>
+          <span className="text-textMuted text-xs">opens</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-sm">
+          <MousePointer2 className="w-3.5 h-3.5 text-accent" />
+          <span className="font-semibold">{clickCount}</span>
+          <span className="text-textMuted text-xs">clicks</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-sm">
+          <MessageCircle className="w-3.5 h-3.5 text-accent" />
+          <span className="font-semibold">{replyCount}</span>
+          <span className="text-textMuted text-xs">replies</span>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <MessageCircle className="w-4 h-4 text-accent" />
           <h3 className="font-semibold text-sm">Prior Engagement (buyer side)</h3>
         </div>
-        <SimulateReply leadEmail={leadEmail} onSimulated={onSimulated} />
+        <div className="flex items-center gap-1">
+          <SimulateEventButtons leadId={leadId} onSimulated={onSimulated} />
+          <SimulateReply leadEmail={leadEmail} onSimulated={onSimulated} />
+        </div>
       </div>
 
       {events.length === 0 ? (
@@ -99,7 +153,7 @@ export function LeadEngagementPanel({
 
                   {e.event_type === "replied" && e.reply_content && (
                     <div className="mt-1 text-xs text-textPrimary bg-surface2 border border-border rounded p-2 whitespace-pre-wrap">
-                      {e.reply_content}
+                      {stripQuotedReply(e.reply_content)}
                     </div>
                   )}
 
@@ -226,6 +280,65 @@ function SimulateReply({
           {submitting ? "Sending..." : "Send"}
         </button>
       </div>
+    </div>
+  );
+}
+
+
+function SimulateEventButtons({
+  leadId,
+  onSimulated,
+}: {
+  leadId: string;
+  onSimulated?: () => void;
+}) {
+  const [loading, setLoading] = useState<string | null>(null);
+
+  async function simulate(eventType: string) {
+    setLoading(eventType);
+    try {
+      await api.simulateEvent({
+        lead_id: leadId,
+        event_type: eventType,
+        clicked_url: eventType === "clicked" ? "https://example.com/demo" : undefined,
+      });
+      onSimulated?.();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={() => simulate("opened")}
+        disabled={!!loading}
+        className="btn-ghost text-xs py-1 px-2 flex items-center gap-1"
+        title="Simulate email open"
+      >
+        <MailOpen className="w-3 h-3" />
+        {loading === "opened" ? "..." : "Open"}
+      </button>
+      <button
+        onClick={() => simulate("clicked")}
+        disabled={!!loading}
+        className="btn-ghost text-xs py-1 px-2 flex items-center gap-1"
+        title="Simulate link click"
+      >
+        <MousePointer2 className="w-3 h-3" />
+        {loading === "clicked" ? "..." : "Click"}
+      </button>
+      <button
+        onClick={() => simulate("bounced")}
+        disabled={!!loading}
+        className="btn-ghost text-xs py-1 px-2 flex items-center gap-1"
+        title="Simulate bounce"
+      >
+        <AlertOctagon className="w-3 h-3" />
+        {loading === "bounced" ? "..." : "Bounce"}
+      </button>
     </div>
   );
 }
