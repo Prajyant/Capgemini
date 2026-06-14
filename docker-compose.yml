@@ -35,6 +35,7 @@ services:
       - SENDGRID_WEBHOOK_SECRET=${SENDGRID_WEBHOOK_SECRET}
       - NEWS_API_KEY=${NEWS_API_KEY}
       - BUILTWITH_API_KEY=${BUILTWITH_API_KEY}
+      - LINKEDIN_API_KEY=${LINKEDIN_API_KEY}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - AUTOPILOT_MODE=${AUTOPILOT_MODE:-false}
@@ -67,6 +68,7 @@ services:
       - SENDGRID_API_KEY=${SENDGRID_API_KEY}
       - NEWS_API_KEY=${NEWS_API_KEY}
       - BUILTWITH_API_KEY=${BUILTWITH_API_KEY}
+      - LINKEDIN_API_KEY=${LINKEDIN_API_KEY}
     depends_on:
       db:
         condition: service_healthy
