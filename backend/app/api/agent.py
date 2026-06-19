@@ -120,3 +120,64 @@ async def reasoning_history(lead_id: UUID, db: AsyncSession = Depends(get_db)):
     )
     decisions = (await db.execute(stmt)).scalars().all()
     return list(decisions)
+
+
+@router.post("/draft-email/{lead_id}")
+async def draft_email(lead_id: UUID, db: AsyncSession = Depends(get_db)):
+    """
+    Generate a personalised draft email for a lead based on full conversation
+    context (prior emails + replies). Returns subject + body for preview/edit.
+    """
+    from app.agent.decision_maker import _serialize_lead, _serialize_history
+    from app.outreach.sequence_generator import generate_reply_email
+
+    lead = (await db.execute(select(Lead).where(Lead.id == lead_id))).scalar_one_or_none()
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+
+    profile = _serialize_lead(lead)
+    history = _serialize_history(lead.email_events or [])
+
+    # Pull the latest decision's personalisation hooks if available
+    latest_decision = (await db.execute(
+        select(AgentDecision)
+        .where(AgentDecision.lead_id == lead_id)
+        .order_by(desc(AgentDecision.created_at))
+        .limit(1)
+    )).scalar_one_or_none()
+
+    hooks = []
+    if latest_decision and latest_decision.full_reasoning:
+        hooks = latest_decision.full_reasoning.get("email_personalisation_hooks", [])
+
+    draft = await generate_reply_email(profile, history, hooks)
+    return draft
+
+
+@router.post("/send-email/{lead_id}")
+async def send_email_to_lead(lead_id: UUID, payload: dict, db: AsyncSession = Depends(get_db)):
+    """
+    Send an email to a lead with the (possibly edited) subject/body.
+    Records the event and updates lead state.
+    """
+    from app.outreach.email_sender import send_email
+
+    lead = (await db.execute(select(Lead).where(Lead.id == lead_id))).scalar_one_or_none()
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+
+    subject = payload.get("subject", "").strip()
+    body = payload.get("body", "").strip()
+    if not subject or not body:
+        raise HTTPException(400, "subject and body are required")
+
+    event = await send_email(db, lead, subject, body)
+    if event is None:
+        raise HTTPException(400, "Email blocked by compliance (lead opted out or invalid state)")
+
+    return {
+        "status": "sent",
+        "message_id": event.message_id,
+        "subject": subject,
+        "lead_state": lead.state,
+    }

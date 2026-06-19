@@ -2,6 +2,13 @@
 .env
 .env.local
 .env.*.local
+env
+backend/.env
+
+# Secrets / recovery codes
+*recovery_code*
+*recovery*.txt
+twilio_2FA_recovery_code.txt
 
 # Python
 __pycache__/
@@ -35,6 +42,10 @@ yarn-error.log*
 
 # Docker
 *.pid
+
+# Celery runtime artifacts
+celerybeat-schedule*
+backend/celerybeat-schedule*
 
 # Database / dumps
 *.sqlite

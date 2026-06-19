@@ -33,8 +33,12 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.reasoning_tasks.process_due_leads",
         "schedule": crontab(minute="*/5"),
     },
+    "check-inbox-every-2min": {
+        "task": "app.tasks.feedback_tasks.check_inbox_task",
+        "schedule": crontab(minute="*/2"),
+    },
     "update-strategies-hourly": {
-        "task": "app.tasks.feedback_tasks.refresh_strategy_metrics",
+        "task": "app.tasks.reasoning_tasks.refresh_strategy_metrics",
         "schedule": crontab(minute=0),
     },
     "ab-test-decision-hourly": {

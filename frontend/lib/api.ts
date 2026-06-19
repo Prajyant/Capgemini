@@ -44,6 +44,9 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  checkInbox: () =>
+    request<any>("/api/webhooks/check-inbox", { method: "POST" }),
+
   importCsv: async (file: File) => {
     const form = new FormData();
     form.append("file", file);
@@ -74,6 +77,13 @@ export const api = {
     }),
   reasoningHistory: (leadId: string) =>
     request<any[]>(`/api/agent/reasoning/${leadId}`),
+  draftEmail: (leadId: string) =>
+    request<any>(`/api/agent/draft-email/${leadId}`, { method: "POST" }),
+  sendEmail: (leadId: string, payload: { subject: string; body: string }) =>
+    request<any>(`/api/agent/send-email/${leadId}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 
   // Sequences
   listSequences: () => request<any[]>("/api/sequences"),
@@ -95,6 +105,20 @@ export const api = {
     }),
   getEmailsForLead: (sequenceId: string, leadId: string) =>
     request<any>(`/api/sequences/${sequenceId}/emails/${leadId}`),
+  sendSequenceStep: (
+    leadId: string,
+    payload: {
+      sequence_id: string;
+      step_number: number;
+      subject: string;
+      body: string;
+      ab_variant?: string;
+    }
+  ) =>
+    request<any>(`/api/sequences/send-step/${leadId}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 
   // Analytics
   overview: () => request<any>("/api/analytics/overview"),

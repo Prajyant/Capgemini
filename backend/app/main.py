@@ -28,8 +28,26 @@ async def lifespan(app: FastAPI):
         logger.info("Database initialised")
     except Exception as e:
         logger.exception("DB init failed: %s", e)
+
+    # Start background inbox polling task
+    inbox_task = asyncio.create_task(_inbox_poll_loop())
     yield
+    inbox_task.cancel()
     logger.info("Shutting down...")
+
+
+async def _inbox_poll_loop():
+    """Background loop that checks IMAP inbox every 60 seconds for replies."""
+    await asyncio.sleep(5)  # Wait for startup to finish
+    while True:
+        try:
+            from app.inbox.imap_reader import check_inbox_for_replies
+            result = await check_inbox_for_replies()
+            if result.get("matched", 0) > 0:
+                logger.info("Inbox poll found %d new replies", result["matched"])
+        except Exception as e:
+            logger.debug("Inbox poll error: %s", e)
+        await asyncio.sleep(60)  # Poll every 60 seconds
 
 
 app = FastAPI(

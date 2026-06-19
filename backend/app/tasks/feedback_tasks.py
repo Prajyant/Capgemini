@@ -29,3 +29,14 @@ async def _decide() -> dict:
     async with get_db_context() as db:
         decided = await decide_winners(db)
         return {"decided": decided}
+
+
+@celery_app.task(name="app.tasks.feedback_tasks.check_inbox_task")
+def check_inbox_task() -> dict:
+    """Periodically check IMAP inbox for replies from leads."""
+    return run_async(_check_inbox())
+
+
+async def _check_inbox() -> dict:
+    from app.inbox.imap_reader import check_inbox_for_replies
+    return await check_inbox_for_replies()

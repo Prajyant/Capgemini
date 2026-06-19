@@ -76,6 +76,29 @@ class Settings(BaseSettings):
     COMPANY_PHYSICAL_ADDRESS: str = "123 Demo Street, San Francisco, CA 94103"
     UNSUBSCRIBE_BASE_URL: str = "http://localhost:8000/unsubscribe"
 
+    # Our product identity — what every outreach email is selling.
+    PRODUCT_NAME: str = "SalesAgent AI"
+    PRODUCT_PITCH: str = (
+        "An autonomous AI sales agent that reasons over each lead's signals and "
+        "decides the next best action — when to email, what to say, when to wait — "
+        "and explains every decision in plain English. Unlike traditional sequence "
+        "tools that blast the same templates to everyone, it personalises every "
+        "touch from live enrichment data and shows its full chain of thought, so "
+        "SDRs stay in control while doing 10x less manual work."
+    )
+    PRODUCT_VALUE_PROPS: str = (
+        "1) Reasoning transparency — see why the agent chose each action. "
+        "2) Per-lead personalisation from real-time enrichment, not templates. "
+        "3) Higher reply rates with less SDR effort. "
+        "4) Human-in-the-loop approval before anything sends."
+    )
+
+    # IMAP Inbox Reading
+    IMAP_HOST: str = ""
+    IMAP_PORT: int = 993
+    IMAP_USER: str = ""
+    IMAP_PASSWORD: str = ""
+
 
 @lru_cache()
 def get_settings() -> Settings:

@@ -46,7 +46,65 @@ class MockChatModel(BaseChatModel):
 
             state_match = re.search(r"CURRENT LEAD STATE:\s*([^\n]+)", prompt_text)
             state = state_match.group(1).strip().lower() if state_match else "new"
-            
+
+            # Detect the most recent reply intent from the engagement history
+            reply_intent = None
+            intent_matches = re.findall(r"intent=(\w+)", prompt_text)
+            if intent_matches:
+                reply_intent = intent_matches[0]  # history is most-recent-first
+
+            # Intent-aware decisions for leads that have replied
+            if reply_intent:
+                first_name = name.split()[0] if name else "there"
+                intent_decision_map = {
+                    "interested": ("send_email", 0.9,
+                        f"I chose to send an email because {first_name} expressed interest. "
+                        f"A prompt, personalized reply that confirms their interest and proposes specific times "
+                        f"keeps the momentum going without being pushy."),
+                    "meeting_requested": ("send_email", 0.92,
+                        f"I chose to send an email because {first_name} asked to schedule a meeting. "
+                        f"I'll reply with two concrete time options and a short agenda so it's easy to say yes."),
+                    "needs_more_info": ("send_email", 0.88,
+                        f"I chose to send an email because {first_name} asked a question before committing. "
+                        f"Answering it directly with a concrete example builds trust and moves the deal forward."),
+                    "competitor": ("send_email", 0.8,
+                        f"I chose to send an email because {first_name} uses a competing tool. "
+                        f"This is an objection to address, not a dead end — I'll acknowledge their current setup "
+                        f"and highlight our differentiated value (reasoning transparency) without bashing the competitor."),
+                    "wrong_person": ("send_email", 0.82,
+                        f"I chose to send an email because {first_name} said they're not the right contact. "
+                        f"I'll thank them and politely ask for a warm introduction to the right person on their team."),
+                    "not_now": ("wait", 0.85,
+                        f"I chose to wait because {first_name} is interested but the timing isn't right. "
+                        f"I'll respect their request and follow up when they suggested rather than pushing now."),
+                    "already_customer": ("close_sequence", 0.9,
+                        f"I chose to close the sequence because {first_name} is already our customer. "
+                        f"No further outreach is needed — I'll hand off to account management."),
+                    "unsubscribe": ("close_sequence", 1.0,
+                        f"I chose to close the sequence because {first_name} asked to be removed. "
+                        f"Honoring opt-outs immediately is required for compliance."),
+                }
+                if reply_intent in intent_decision_map:
+                    decision, confidence, summary = intent_decision_map[reply_intent]
+                    hooks = []
+                    if decision == "send_email":
+                        hooks = ["reference their reply", "propose specific next step"]
+                    response_data = {
+                        "signal_analysis": f"Lead replied with intent '{reply_intent}'. This is the strongest available signal and directly drives the next action.",
+                        "situation_assessment": f"{first_name} is actively engaged. The reply intent determines the optimal response.",
+                        "options_considered": [
+                            f"{decision} — directly addresses the reply intent",
+                            "wait — only appropriate if they asked for later timing",
+                            "escalate_to_human — reserve for genuinely ambiguous cases",
+                        ],
+                        "decision": decision,
+                        "confidence": confidence,
+                        "reasoning_summary": summary,
+                        "next_wait_days": 30 if decision == "wait" else 0,
+                        "email_personalisation_hooks": hooks,
+                    }
+                    return ChatResult(generations=[ChatGeneration(message=AIMessage(content=json.dumps(response_data)))])
+
             # Match seeded scenarios for exact matches
             if "Priya Patel" in name:
                 response_data = {
@@ -210,18 +268,24 @@ class MockChatModel(BaseChatModel):
             reply_text = reply_match.group(1).strip() if reply_match else ""
             t = reply_text.lower()
             
-            if any(k in t for k in ["unsubscribe", "remove me", "stop emailing"]):
+            if any(k in t for k in ["unsubscribe", "remove me", "stop emailing", "don't email", "do not email"]):
                 response_data = {"sentiment": "negative", "intent": "unsubscribe", "confidence": 0.95, "summary": "Unsubscribe request"}
             elif any(k in t for k in ["out of office", "ooo", "on vacation", "out of the office"]):
                 response_data = {"sentiment": "neutral", "intent": "unknown", "confidence": 0.95, "summary": "Auto-reply OOO"}
-            elif any(k in t for k in ["interested", "yes", "sounds good", "let's chat", "tell me more", "book"]):
-                response_data = {"sentiment": "positive", "intent": "meeting_requested", "confidence": 0.90, "summary": "Expressed interest in scheduling a meeting"}
-            elif any(k in t for k in ["already use", "we use", "we have"]):
-                response_data = {"sentiment": "objection", "intent": "competitor", "confidence": 0.85, "summary": "Objection: already uses competitor"}
-            elif any(k in t for k in ["not now", "later", "next quarter"]):
-                response_data = {"sentiment": "neutral", "intent": "not_now", "confidence": 0.80, "summary": "Deferred"}
+            elif any(k in t for k in ["wrong person", "not the right person", "you'd want to", "talk to our", "reach out to", "forward this"]):
+                response_data = {"sentiment": "neutral", "intent": "wrong_person", "confidence": 0.8, "summary": "Pointed to a different contact"}
+            elif any(k in t for k in ["already use", "already using", "we use", "we're using", "happy with", "why would we switch", "why switch"]):
+                response_data = {"sentiment": "objection", "intent": "competitor", "confidence": 0.85, "summary": "Uses a competing solution"}
+            elif any(k in t for k in ["calendar invite", "send me a", "let's do it", "book a", "set up a call"]):
+                response_data = {"sentiment": "positive", "intent": "meeting_requested", "confidence": 0.9, "summary": "Wants to schedule a meeting"}
+            elif any(k in t for k in ["not now", "later", "next quarter", "next year", "heads-down", "heads down", "revisit", "circle back", "busy"]):
+                response_data = {"sentiment": "neutral", "intent": "not_now", "confidence": 0.8, "summary": "Deferred to later"}
+            elif any(k in t for k in ["interested", "sounds good", "open to", "tell me more", "learn more"]):
+                response_data = {"sentiment": "positive", "intent": "interested", "confidence": 0.85, "summary": "Expressed interest"}
+            elif any(k in t for k in ["how is", "how are you different", "different from", "what makes", "can you tell me", "question", "pricing"]):
+                response_data = {"sentiment": "neutral", "intent": "needs_more_info", "confidence": 0.75, "summary": "Asked for more information"}
             else:
-                response_data = {"sentiment": "neutral", "intent": "needs_more_info", "confidence": 0.70, "summary": "Replied requesting more information"}
+                response_data = {"sentiment": "neutral", "intent": "unknown", "confidence": 0.4, "summary": "Reply received"}
             return ChatResult(generations=[ChatGeneration(message=AIMessage(content=json.dumps(response_data)))])
 
         # Default fallback

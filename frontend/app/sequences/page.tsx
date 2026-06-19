@@ -433,6 +433,8 @@ function PreviewEmailsModal({
   const [emails, setEmails] = useState<Email[] | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sentSteps, setSentSteps] = useState<Record<number, boolean>>({});
+  const [sendingStep, setSendingStep] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -459,6 +461,7 @@ function PreviewEmailsModal({
     setGenerating(true);
     setError(null);
     setEmails(null);
+    setSentSteps({});
     try {
       const res = await api.getEmailsForLead(sequence.id, leadId);
       setEmails(res.emails || []);
@@ -469,13 +472,43 @@ function PreviewEmailsModal({
     }
   }
 
+  function updateEmail(idx: number, patch: Partial<Email>) {
+    setEmails((cur) =>
+      cur ? cur.map((e, i) => (i === idx ? { ...e, ...patch } : e)) : cur
+    );
+  }
+
+  async function sendStep(idx: number) {
+    if (!emails || !leadId) return;
+    const email = emails[idx];
+    setSendingStep(idx);
+    setError(null);
+    try {
+      await api.sendSequenceStep(leadId, {
+        sequence_id: sequence.id,
+        step_number: idx + 1,
+        subject: email.subject,
+        body: email.body,
+        ab_variant: email.ab_variant,
+      });
+      setSentSteps((cur) => ({ ...cur, [idx]: true }));
+    } catch (e: any) {
+      setError(e?.message || "Failed to send email");
+    } finally {
+      setSendingStep(null);
+    }
+  }
+
+  const selectedLead = leads.find((l) => l.id === leadId);
+
   return (
     <Modal title={`Preview: ${sequence.name}`} onClose={onClose} wide>
       <div className="space-y-4">
         <p className="text-sm text-textMuted">
-          Pick a lead — the agent will generate the personalised emails this
-          sequence would produce using that lead's enrichment context. This calls
-          the LLM, so it can take a few seconds.
+          Pick a lead — the agent generates the personalised emails this sequence
+          would produce from that lead's enrichment context. You can edit any
+          email and send it directly. This calls the LLM, so it may take a few
+          seconds.
         </p>
 
         <div className="flex items-end gap-2">
@@ -521,44 +554,106 @@ function PreviewEmailsModal({
           </button>
         </div>
 
+        {selectedLead && emails && (
+          <div className="text-xs text-textMuted">
+            Sending to:{" "}
+            <span className="text-textPrimary">{selectedLead.email}</span>
+          </div>
+        )}
+
         {error && <div className="text-danger text-sm">{error}</div>}
 
         {emails && emails.length > 0 && (
           <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
-            {emails.map((e, i) => (
-              <div key={i} className="card">
-                <div className="flex items-center justify-between mb-2 gap-2">
-                  <div className="font-semibold truncate">
-                    Step {i + 1}:{" "}
-                    {e.subject || (
-                      <span className="italic text-textMuted">(no subject)</span>
+            {emails.map((e, i) => {
+              const step = sequence.steps?.[i];
+              const isSent = sentSteps[i];
+              const isSending = sendingStep === i;
+              return (
+                <div key={i} className="card">
+                  <div className="flex items-center justify-between mb-2 gap-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="badge bg-surface2 border border-border">
+                        Step {i + 1}
+                      </span>
+                      {step && (
+                        <span className="text-textMuted flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {step.wait_days === 0
+                            ? "Day 0"
+                            : `+${step.wait_days}d`}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs shrink-0">
+                      <span className="badge bg-surface2 border border-border">
+                        Variant {e.ab_variant}
+                      </span>
+                      <span
+                        className={`badge ${
+                          e.passes_spam_check
+                            ? "bg-success/15 text-success"
+                            : "bg-danger/15 text-danger"
+                        }`}
+                      >
+                        Spam {Number(e.spam_score ?? 0).toFixed(1)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <label className="block text-xs text-textMuted mb-1">
+                    Subject
+                  </label>
+                  <input
+                    className="input mb-2"
+                    value={e.subject}
+                    onChange={(ev) =>
+                      updateEmail(i, { subject: ev.target.value })
+                    }
+                    disabled={isSent || isSending}
+                  />
+
+                  <label className="block text-xs text-textMuted mb-1">
+                    Body
+                  </label>
+                  <textarea
+                    className="input font-sans resize-y"
+                    rows={6}
+                    value={e.body}
+                    onChange={(ev) => updateEmail(i, { body: ev.target.value })}
+                    disabled={isSent || isSending}
+                  />
+
+                  {e.personalisation_used && (
+                    <div className="text-xs text-textMuted mt-2 border-t border-border pt-2">
+                      Personalisation: {e.personalisation_used}
+                    </div>
+                  )}
+
+                  <div className="flex justify-end mt-3">
+                    {isSent ? (
+                      <span className="text-success text-sm flex items-center gap-1">
+                        <Mail className="w-4 h-4" />
+                        Sent
+                      </span>
+                    ) : (
+                      <button
+                        className="btn-primary flex items-center gap-2 text-sm"
+                        onClick={() => sendStep(i)}
+                        disabled={isSending || !!sendingStep}
+                      >
+                        {isSending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Mail className="w-4 h-4" />
+                        )}
+                        {isSending ? "Sending..." : "Send this email"}
+                      </button>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 text-xs shrink-0">
-                    <span className="badge bg-surface2 border border-border">
-                      Variant {e.ab_variant}
-                    </span>
-                    <span
-                      className={`badge ${
-                        e.passes_spam_check
-                          ? "bg-success/15 text-success"
-                          : "bg-danger/15 text-danger"
-                      }`}
-                    >
-                      Spam {Number(e.spam_score ?? 0).toFixed(1)}
-                    </span>
-                  </div>
                 </div>
-                <pre className="text-sm text-textPrimary whitespace-pre-wrap font-sans">
-                  {e.body}
-                </pre>
-                {e.personalisation_used && (
-                  <div className="text-xs text-textMuted mt-2 border-t border-border pt-2">
-                    Personalisation: {e.personalisation_used}
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

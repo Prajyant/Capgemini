@@ -81,3 +81,44 @@ async def get_personalised_emails(
 async def approve_email():
     """Stub — in production this would mark a generated email approved for send."""
     return {"status": "approved"}
+
+
+@router.post("/send-step/{lead_id}")
+async def send_sequence_step(lead_id: UUID, payload: dict, db: AsyncSession = Depends(get_db)):
+    """
+    Send a single (possibly edited) sequence email to a lead and enroll them
+    in the sequence. Records the event and advances the lead state.
+    """
+    from app.outreach.email_sender import send_email
+
+    lead = (await db.execute(select(Lead).where(Lead.id == lead_id))).scalar_one_or_none()
+    if not lead:
+        raise HTTPException(404, "Lead not found")
+
+    subject = (payload.get("subject") or "").strip()
+    body = (payload.get("body") or "").strip()
+    ab_variant = payload.get("ab_variant", "A")
+    sequence_id = payload.get("sequence_id")
+
+    if not subject or not body:
+        raise HTTPException(400, "subject and body are required")
+
+    event = await send_email(db, lead, subject, body, ab_variant=ab_variant)
+    if event is None:
+        raise HTTPException(400, "Email blocked by compliance (lead opted out or invalid state)")
+
+    # Enroll the lead in the sequence
+    if sequence_id:
+        try:
+            lead.current_sequence_id = UUID(sequence_id)
+            lead.current_step = int(payload.get("step_number", 1))
+        except (ValueError, TypeError):
+            pass
+    await db.flush()
+
+    return {
+        "status": "sent",
+        "message_id": event.message_id,
+        "subject": subject,
+        "lead_state": lead.state,
+    }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Mail, Phone, Linkedin, Brain, Sparkles } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Linkedin, Brain, Sparkles, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import { Lead, AgentDecision } from "@/lib/types";
 import { StateBadge } from "@/components/shared/StatusBadge";
@@ -22,6 +22,7 @@ export default function LeadDetail() {
   const [events, setEvents] = useState<EngagementEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [reasoning, setReasoning] = useState(false);
+  const [checkingInbox, setCheckingInbox] = useState(false);
 
   const load = async () => {
     try {
@@ -42,6 +43,9 @@ export default function LeadDetail() {
 
   useEffect(() => {
     load();
+    // Auto-refresh every 30 seconds to pick up new replies
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
   }, [id]);
 
   const triggerReasoning = async () => {
@@ -150,9 +154,29 @@ export default function LeadDetail() {
 
       {/* Prior Engagement (buyer-side mailbox) */}
       <section className="relative">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-textMuted mb-3">
-          Prior Engagement
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-textMuted">
+            Prior Engagement
+          </h2>
+          <button
+            onClick={async () => {
+              setCheckingInbox(true);
+              try {
+                await api.checkInbox();
+                await load();
+              } catch (e) {
+                console.error(e);
+              } finally {
+                setCheckingInbox(false);
+              }
+            }}
+            disabled={checkingInbox}
+            className="btn-secondary flex items-center gap-1 text-xs disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3 h-3 ${checkingInbox ? "animate-spin" : ""}`} />
+            {checkingInbox ? "Checking..." : "Check Inbox"}
+          </button>
+        </div>
         <LeadEngagementPanel
           events={events}
           leadEmail={lead.email}
@@ -166,7 +190,12 @@ export default function LeadDetail() {
           <Brain className="w-4 h-4" />
           Agent Chain of Thought
         </h2>
-        <LeadStateTimeline decisions={decisions} />
+        <LeadStateTimeline
+          decisions={decisions}
+          leadId={id}
+          leadEmail={lead.email}
+          onEmailSent={load}
+        />
       </section>
     </div>
   );

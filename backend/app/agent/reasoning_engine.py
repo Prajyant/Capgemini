@@ -174,11 +174,14 @@ def assess_context(state: LeadAgentState) -> LeadAgentState:
     current_state = state.get("current_state", "new")
 
     if not profile.get("opted_out"):
-        if signals.get("emails_sent_count", 0) < 3 and current_state not in ("converted", "closed"):
+        # Email is always the preferred channel for follow-ups
+        if current_state not in ("converted", "closed"):
             actions.append("send_email")
         if profile.get("linkedin_url"):
             actions.append("send_linkedin_dm")
-        if profile.get("phone") or profile.get("seniority_level") in ("C-Level", "VP"):
+        # Only offer call if there's been prior engagement (not as first action)
+        if (profile.get("phone") or profile.get("seniority_level") in ("C-Level", "VP")) \
+                and signals.get("has_replied"):
             actions.append("suggest_call")
 
     actions.append("wait")
@@ -201,17 +204,136 @@ CRITICAL RULES:
 5. Be honest about uncertainty — if signals are mixed, say so
 6. Reference specific signals (e.g., "opened twice in 24h", "Series A announced", "replied with objection")
 
+DECISION PRIORITY FRAMEWORK (follow this order):
+- If lead has OPTED OUT → close_sequence (mandatory)
+- If lead replied with "interested" or "meeting_requested" intent → send_email (send a follow-up to confirm time/details, NOT suggest_call)
+- If lead replied with "needs_more_info" intent → send_email (answer their question with value)
+- If lead replied with "wrong_person" intent → send_email (thank them, politely ask for a referral or introduction to the right person)
+- If lead replied with "not_now" → wait (respect their timing, follow up in the number of days they mentioned, or 30 days)
+- If lead replied with "competitor" or "objection" → send_email (address the objection with differentiated value)
+- If lead replied with "already_customer" → close_sequence (they're already a customer)
+- If lead replied with "unsubscribe" → close_sequence
+- If lead has opened multiple times but NOT replied → send_email (different angle) or send_linkedin_dm
+- If lead is brand new with high intent signals → send_email (initial outreach)
+- If no engagement after 2+ emails → escalate_to_human or suggest_call as last resort
+- Only suggest_call AFTER at least one email exchange has occurred AND they've expressed interest in connecting
+
+KEY PRINCIPLE: Email is always the preferred first response to a reply. Only choose WAIT when the lead explicitly asked to be contacted later ("not_now"). Never WAIT on a reply that needs an answer or action (wrong_person, needs_more_info, interested, objection) — those require a send_email response.
+
 OUTPUT FORMAT (respond with valid JSON only, no markdown fences):
 {
     "signal_analysis": "What signals did you observe and what do they mean?",
     "situation_assessment": "What is the overall situation with this lead right now?",
-    "options_considered": ["option 1 with pros/cons", "option 2 with pros/cons"],
+    "options_considered": ["option 1 with pros/cons", "option 2 with pros/cons", "option 3 with pros/cons"],
     "decision": "one of: send_email | send_linkedin_dm | suggest_call | wait | escalate_to_human | close_sequence",
     "confidence": 0.0 to 1.0,
-    "reasoning_summary": "Plain English explanation for the SDR. Start with 'I chose to...' and explain why based on specific signals. Keep under 50 words.",
-    "next_wait_days": integer,
+    "reasoning_summary": "Plain English explanation for the SDR. Start with 'I chose to...' and explain why based on specific signals. 2-3 sentences max.",
+    "next_wait_days": integer (0 if action is immediate),
     "email_personalisation_hooks": ["specific hook 1", "specific hook 2"]
 }"""
+
+
+def _heuristic_decision(profile: dict, signals: dict, history: list, state: "LeadAgentState") -> dict:
+    """
+    Rule-based fallback used when the LLM is unavailable (rate limit / error).
+    Produces a sensible decision from the most recent reply intent and signals,
+    so the agent never returns a dead-end 'system error' to the user.
+    """
+    first_name = profile.get("first_name") or "this lead"
+    reply_intent = _last_reply_intent(history)
+    has_replied = signals.get("has_replied")
+    emails_sent = signals.get("emails_sent_count", 0)
+    opens_7d = signals.get("email_opens_7d", 0)
+
+    intent_map = {
+        "interested": ("send_email", 0.85,
+            f"{first_name} expressed interest, so I'm sending a follow-up email to confirm and propose next steps.", 0),
+        "meeting_requested": ("send_email", 0.88,
+            f"{first_name} asked to meet — I'm replying with concrete time options to lock it in.", 0),
+        "needs_more_info": ("send_email", 0.82,
+            f"{first_name} asked a question before committing. I'm sending an email that answers it directly with value.", 0),
+        "competitor": ("send_email", 0.75,
+            f"{first_name} uses a competing tool. This is an objection to address, not a dead end — I'm sending a differentiation email.", 0),
+        "wrong_person": ("send_email", 0.78,
+            f"{first_name} isn't the right contact. I'm sending a polite email asking for an introduction to the right person.", 0),
+        "not_now": ("wait", 0.8,
+            f"{first_name} asked to be contacted later, so I'm waiting and will follow up when the timing is right.", 30),
+        "out_of_office": ("wait", 0.85,
+            f"{first_name} is out of office. I'm waiting until they return before following up.", 7),
+        "already_customer": ("close_sequence", 0.9,
+            f"{first_name} is already our customer. Closing the sequence and handing off to account management.", 0),
+        "unsubscribe": ("close_sequence", 1.0,
+            f"{first_name} asked to be removed. Closing the sequence immediately to honor the opt-out.", 0),
+    }
+
+    if reply_intent in intent_map:
+        decision, confidence, summary, wait_days = intent_map[reply_intent]
+        hooks = ["reference their reply", "propose a clear next step"] if decision == "send_email" else []
+        return {
+            "signal_analysis": f"Most recent reply intent is '{reply_intent}'. This is the strongest signal and drives the next action.",
+            "situation_assessment": f"{first_name} is actively engaged; the reply intent determines the optimal response.",
+            "options_considered": [
+                f"{decision} — directly addresses the reply",
+                "wait — only if they asked for later timing",
+                "escalate_to_human — reserved for genuinely ambiguous cases",
+            ],
+            "decision": decision,
+            "confidence": confidence,
+            "reasoning_summary": summary,
+            "next_wait_days": wait_days,
+            "email_personalisation_hooks": hooks,
+        }
+
+    if not has_replied:
+        if emails_sent == 0:
+            return {
+                "signal_analysis": "Lead has not been contacted yet but matches our ICP.",
+                "situation_assessment": "Fresh lead in a growth phase. Good time for a first touch.",
+                "options_considered": ["send_email — initiate outreach", "wait — no reason to delay"],
+                "decision": "send_email", "confidence": 0.75,
+                "reasoning_summary": f"I'm sending an intro email to {first_name} — they fit our ICP and there's no prior contact yet.",
+                "next_wait_days": 0,
+                "email_personalisation_hooks": ["company context", "relevant pain point"],
+            }
+        if opens_7d > 0:
+            return {
+                "signal_analysis": f"{opens_7d} open(s) in the last 7 days, no reply yet.",
+                "situation_assessment": "Lead is curious but hasn't committed. A gentle nudge may help.",
+                "options_considered": ["send_email — re-engage", "wait — give them space", "send_linkedin_dm — softer channel"],
+                "decision": "send_email", "confidence": 0.7,
+                "reasoning_summary": f"{first_name} opened our email but hasn't replied. I'm sending a short follow-up from a new angle.",
+                "next_wait_days": 3,
+                "email_personalisation_hooks": ["new angle", "value reminder"],
+            }
+        if emails_sent >= 3:
+            return {
+                "signal_analysis": "3+ emails sent with no engagement.",
+                "situation_assessment": "Diminishing returns. Time to pause or hand off.",
+                "options_considered": ["wait — pause outreach", "escalate_to_human — manual review", "close_sequence"],
+                "decision": "wait", "confidence": 0.65,
+                "reasoning_summary": f"No engagement from {first_name} after several emails. I'm pausing outreach to avoid hurting sender reputation.",
+                "next_wait_days": 7,
+                "email_personalisation_hooks": [],
+            }
+        return {
+            "signal_analysis": "Contacted, awaiting response.",
+            "situation_assessment": "Reasonable to wait before the next touch.",
+            "options_considered": ["wait — give them time", "send_email — follow up"],
+            "decision": "wait", "confidence": 0.7,
+            "reasoning_summary": f"I'm waiting to give {first_name} time to respond before the next follow-up.",
+            "next_wait_days": 3,
+            "email_personalisation_hooks": [],
+        }
+
+    return {
+        "signal_analysis": "Lead replied but intent is ambiguous.",
+        "situation_assessment": "A direct reply keeps the conversation going.",
+        "options_considered": ["send_email — clarify and add value", "escalate_to_human"],
+        "decision": "send_email", "confidence": 0.65,
+        "reasoning_summary": f"{first_name} replied but their intent is unclear. I'm sending a friendly email to clarify and keep the conversation moving.",
+        "next_wait_days": 2,
+        "email_personalisation_hooks": ["clarify their needs"],
+    }
 
 
 def reason_and_decide(state: LeadAgentState) -> LeadAgentState:
@@ -265,17 +387,8 @@ Reason carefully about this lead's situation, weigh the available actions, and d
 
         reasoning_output = json.loads(content)
     except Exception as e:
-        logger.exception("Reasoning failed, falling back to escalation: %s", e)
-        reasoning_output = {
-            "signal_analysis": f"Reasoning engine error: {e}",
-            "situation_assessment": "Unable to reason automatically.",
-            "options_considered": [],
-            "decision": "escalate_to_human",
-            "confidence": 0.0,
-            "reasoning_summary": "I could not reason about this lead due to a system error. Escalating to a human SDR for manual review.",
-            "next_wait_days": 1,
-            "email_personalisation_hooks": [],
-        }
+        logger.warning("LLM reasoning failed (%s). Using heuristic fallback.", e)
+        reasoning_output = _heuristic_decision(profile, signals, history, state)
 
     state["full_reasoning"] = reasoning_output
     state["reasoning"] = json.dumps(reasoning_output)

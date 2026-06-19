@@ -199,3 +199,14 @@ async def inbound_reply(request: Request, db: AsyncSession = Depends(get_db)):
         pass
 
     return {"status": "processed", "classification": classification}
+
+
+@router.post("/check-inbox")
+async def check_inbox():
+    """
+    Manually trigger an IMAP inbox check.
+    Reads unread emails, matches them to leads, and processes as replies.
+    """
+    from app.inbox.imap_reader import check_inbox_for_replies
+    result = await check_inbox_for_replies()
+    return result
