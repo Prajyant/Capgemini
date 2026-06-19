@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertOctagon,
   Mail,
@@ -10,6 +10,7 @@ import {
   Send,
   ShieldOff,
   Sparkles,
+  X,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { formatRelative } from "@/lib/utils";
@@ -141,6 +142,14 @@ export function LeadEngagementPanel({
   );
 }
 
+/**
+ * Quality-of-life affordance for demos: posts a fake inbound reply through the
+ * webhook so we can rehearse the agent's response flow without a real reply.
+ *
+ * Lives in a centred modal — the previous implementation rendered as a
+ * floating popover positioned via `absolute right-6 mt-12`, which routinely
+ * landed off-screen on smaller viewports.
+ */
 function SimulateReply({
   leadEmail,
   onSimulated,
@@ -155,6 +164,16 @@ function SimulateReply({
   const [subject, setSubject] = useState("Re: your note");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Close with Escape when the modal is open.
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !submitting) setOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, submitting]);
 
   async function send() {
     if (!body.trim()) {
@@ -178,8 +197,8 @@ function SimulateReply({
     }
   }
 
-  if (!open) {
-    return (
+  return (
+    <>
       <button
         onClick={() => setOpen(true)}
         className="btn-ghost text-xs py-1 px-2 flex items-center gap-1.5"
@@ -188,44 +207,65 @@ function SimulateReply({
         <Sparkles className="w-3.5 h-3.5" />
         Simulate buyer reply
       </button>
-    );
-  }
 
-  return (
-    <div className="absolute right-6 mt-12 w-80 bg-surface border border-border rounded-md shadow-xl p-3 z-20 space-y-2">
-      <div className="text-xs font-semibold">Simulate inbound reply</div>
-      <input
-        className="input"
-        value={subject}
-        onChange={(e) => setSubject(e.target.value)}
-        placeholder="Subject"
-        disabled={submitting}
-      />
-      <textarea
-        className="input min-h-[90px]"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder="Reply body"
-        disabled={submitting}
-      />
-      {error && <div className="text-danger text-xs">{error}</div>}
-      <div className="flex justify-end gap-2 pt-1">
-        <button
-          className="btn-ghost text-xs py-1 px-2"
-          onClick={() => setOpen(false)}
-          disabled={submitting}
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => !submitting && setOpen(false)}
         >
-          Cancel
-        </button>
-        <button
-          className="btn-primary text-xs py-1 px-2 flex items-center gap-1.5"
-          onClick={send}
-          disabled={submitting}
-        >
-          <Send className="w-3.5 h-3.5" />
-          {submitting ? "Sending..." : "Send"}
-        </button>
-      </div>
-    </div>
+          <div
+            className="bg-surface border border-border rounded-md shadow-xl w-full max-w-md p-4 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold">Simulate inbound reply</div>
+              <button
+                className="text-textMuted hover:text-textPrimary"
+                onClick={() => setOpen(false)}
+                disabled={submitting}
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="text-xs text-textMuted">
+              From: <span className="text-textPrimary">{leadEmail}</span>
+            </div>
+            <input
+              className="input"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              placeholder="Subject"
+              disabled={submitting}
+            />
+            <textarea
+              className="input min-h-[120px] font-sans resize-y"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="Reply body"
+              disabled={submitting}
+            />
+            {error && <div className="text-danger text-xs">{error}</div>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                className="btn-ghost text-xs"
+                onClick={() => setOpen(false)}
+                disabled={submitting}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-primary text-xs flex items-center gap-1.5"
+                onClick={send}
+                disabled={submitting}
+              >
+                <Send className="w-3.5 h-3.5" />
+                {submitting ? "Sending..." : "Send"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

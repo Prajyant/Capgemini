@@ -4,15 +4,26 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { AgentDecision } from "@/lib/types";
 import { AgentReasoningPanel } from "@/components/dashboard/AgentReasoningPanel";
-import { EmailComposer } from "@/components/leads/EmailComposer";
 
+/**
+ * Renders the agent's chain-of-thought timeline for one lead.
+ *
+ * The "Compose Email" entry point lives at the top of the lead detail page
+ * (always visible), so we no longer duplicate it inline here.
+ *
+ * `onApprove` / `onOverride` are forwarded to the latest decision card so
+ * presenters can approve or override the agent's recommendation directly
+ * from the chain of thought.
+ */
 export function LeadStateTimeline({
   decisions,
-  leadId,
-  leadEmail,
-  onEmailSent,
+  onApprove,
+  onOverride,
 }: {
   decisions: AgentDecision[];
+  onApprove?: (id: string) => Promise<void> | void;
+  onOverride?: (id: string) => Promise<void> | void;
+  // Kept on the type for backwards compatibility; unused now.
   leadId?: string;
   leadEmail?: string;
   onEmailSent?: () => void;
@@ -30,8 +41,6 @@ export function LeadStateTimeline({
   // decisions arrive newest-first from the API
   const latest = decisions[0];
   const older = decisions.slice(1);
-  const showEmailComposer =
-    latest.decision_type === "send_email" && leadId && leadEmail;
 
   return (
     <div className="space-y-4">
@@ -43,26 +52,13 @@ export function LeadStateTimeline({
       <div className="relative pl-4 border-l border-border">
         <div className="relative">
           <div className="absolute -left-[21px] top-3 w-3 h-3 rounded-full bg-accent border-2 border-bg" />
-          <AgentReasoningPanel decision={latest} />
+          <AgentReasoningPanel
+            decision={latest}
+            onApprove={onApprove}
+            onOverride={onOverride}
+          />
         </div>
       </div>
-
-      {/* Email composer appears when the agent recommends sending an email */}
-      {showEmailComposer && (
-        <div className="card border-accent/30 bg-accent/5">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="text-sm text-textMuted">
-              The agent recommends sending an email. Review and send a
-              personalized draft below.
-            </div>
-            <EmailComposer
-              leadId={leadId!}
-              leadEmail={leadEmail!}
-              onSent={onEmailSent}
-            />
-          </div>
-        </div>
-      )}
 
       {older.length > 0 && (
         <div>

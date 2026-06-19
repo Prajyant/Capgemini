@@ -40,6 +40,10 @@ services:
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - AUTOPILOT_MODE=${AUTOPILOT_MODE:-false}
       - CONFIDENCE_THRESHOLD=${CONFIDENCE_THRESHOLD:-0.65}
+      - IMAP_HOST=${IMAP_HOST:-}
+      - IMAP_PORT=${IMAP_PORT:-993}
+      - IMAP_USER=${IMAP_USER:-}
+      - IMAP_PASSWORD=${IMAP_PASSWORD:-}
     depends_on:
       db:
         condition: service_healthy
@@ -69,6 +73,10 @@ services:
       - NEWS_API_KEY=${NEWS_API_KEY}
       - BUILTWITH_API_KEY=${BUILTWITH_API_KEY}
       - LINKEDIN_API_KEY=${LINKEDIN_API_KEY}
+      - IMAP_HOST=${IMAP_HOST:-}
+      - IMAP_PORT=${IMAP_PORT:-993}
+      - IMAP_USER=${IMAP_USER:-}
+      - IMAP_PASSWORD=${IMAP_PASSWORD:-}
     depends_on:
       db:
         condition: service_healthy
@@ -88,6 +96,10 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - IMAP_HOST=${IMAP_HOST:-}
+      - IMAP_PORT=${IMAP_PORT:-993}
+      - IMAP_USER=${IMAP_USER:-}
+      - IMAP_PASSWORD=${IMAP_PASSWORD:-}
     depends_on:
       - redis
       - db

@@ -1,5 +1,7 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+import { getDemoRecipient } from "./demoMode";
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
@@ -14,6 +16,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`API ${path} failed: ${res.status} ${text}`);
   }
   return res.json() as Promise<T>;
+}
+
+/**
+ * Inject the demo recipient override (if set) into a send payload.
+ * The presenter's choice in the navbar wins unless the caller explicitly
+ * passed a `to_email` already.
+ */
+function withDemoRecipient<T extends { to_email?: string }>(payload: T): T {
+  if (payload.to_email) return payload;
+  const override = getDemoRecipient();
+  if (!override) return payload;
+  return { ...payload, to_email: override };
 }
 
 export const api = {
@@ -33,6 +47,17 @@ export const api = {
     }),
   enrichLead: (id: string) =>
     request<any>(`/api/leads/${id}/enrich`, { method: "POST" }),
+
+  addLeadNews: (
+    id: string,
+    payload: { headline: string; source?: string; url?: string; summary?: string; published_at?: string }
+  ) =>
+    request<any>(`/api/leads/${id}/news`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  removeLeadNews: (id: string, index: number) =>
+    request<any>(`/api/leads/${id}/news/${index}`, { method: "DELETE" }),
 
   simulateInboundReply: (payload: {
     from_email: string;
@@ -58,6 +83,12 @@ export const api = {
     return res.json();
   },
 
+  seedDemoLeads: (wipe = true) =>
+    request<{ wiped: boolean; created: number; lead_ids: string[] }>(
+      `/api/leads/seed-demo?wipe=${wipe}`,
+      { method: "POST" }
+    ),
+
   // Agent
   decideForLead: (leadId: string) =>
     request<any>(`/api/agent/decide/${leadId}`, { method: "POST" }),
@@ -69,8 +100,13 @@ export const api = {
     ).toString();
     return request<any[]>(`/api/agent/decisions${q ? `?${q}` : ""}`);
   },
-  approveDecision: (id: string) =>
-    request<any>(`/api/agent/decisions/${id}/approve`, { method: "POST" }),
+  approveDecision: (id: string, payload?: { to_email?: string }) => {
+    const body = withDemoRecipient(payload || {});
+    return request<any>(`/api/agent/decisions/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
   overrideDecision: (id: string, action: string) =>
     request<any>(`/api/agent/decisions/${id}/override?new_action=${action}`, {
       method: "POST",
@@ -79,10 +115,13 @@ export const api = {
     request<any[]>(`/api/agent/reasoning/${leadId}`),
   draftEmail: (leadId: string) =>
     request<any>(`/api/agent/draft-email/${leadId}`, { method: "POST" }),
-  sendEmail: (leadId: string, payload: { subject: string; body: string }) =>
+  sendEmail: (
+    leadId: string,
+    payload: { subject: string; body: string; to_email?: string }
+  ) =>
     request<any>(`/api/agent/send-email/${leadId}`, {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(withDemoRecipient(payload)),
     }),
 
   // Sequences
@@ -113,12 +152,20 @@ export const api = {
       subject: string;
       body: string;
       ab_variant?: string;
+      to_email?: string;
     }
   ) =>
     request<any>(`/api/sequences/send-step/${leadId}`, {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(withDemoRecipient(payload)),
     }),
+  enrollLeadInSequence: (sequenceId: string, leadId: string, startNow = true) =>
+    request<any>(
+      `/api/sequences/${sequenceId}/enroll/${leadId}?start_now=${startNow}`,
+      { method: "POST" }
+    ),
+  progressSequencesNow: () =>
+    request<any>("/api/sequences/progress/run-now", { method: "POST" }),
 
   // Analytics
   overview: () => request<any>("/api/analytics/overview"),

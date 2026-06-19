@@ -29,10 +29,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.exception("DB init failed: %s", e)
 
-    # Start background inbox polling task
-    inbox_task = asyncio.create_task(_inbox_poll_loop())
+    # Only spin up the inbox poll loop when IMAP is actually configured.
+    # Polling a disabled inbox every 60s did nothing useful and just spammed
+    # warnings on every cycle.
+    inbox_task = None
+    if settings.IMAP_HOST and settings.IMAP_USER and settings.IMAP_PASSWORD:
+        inbox_task = asyncio.create_task(_inbox_poll_loop())
+        logger.info("Inbox poll loop started (every 60s)")
+    else:
+        logger.info("IMAP not configured — inbox poll loop disabled")
+
     yield
-    inbox_task.cancel()
+
+    if inbox_task is not None:
+        inbox_task.cancel()
     logger.info("Shutting down...")
 
 
@@ -124,13 +134,28 @@ async def stream_activity(request: Request):
 async def unsubscribe(lead_id: str):
     """One-click unsubscribe per CAN-SPAM. Marks the lead opted_out."""
     from datetime import datetime, timezone
+    from uuid import UUID
+
     from sqlalchemy import select
     from app.database import get_db_context
     from app.models import Lead
 
+    # Validate the path param before issuing a query — feeding a non-UUID
+    # string into the WHERE clause crashes asyncpg with a DBAPIError.
+    try:
+        lead_uuid = UUID(lead_id)
+    except (ValueError, TypeError):
+        return HTMLResponse(
+            "<html><body style='font-family:sans-serif;padding:40px;text-align:center;'>"
+            "<h2>Invalid unsubscribe link</h2>"
+            "<p>This link is malformed. If you keep receiving emails, please reply with 'unsubscribe'.</p>"
+            "</body></html>",
+            status_code=400,
+        )
+
     try:
         async with get_db_context() as db:
-            lead = (await db.execute(select(Lead).where(Lead.id == lead_id))).scalar_one_or_none()
+            lead = (await db.execute(select(Lead).where(Lead.id == lead_uuid))).scalar_one_or_none()
             if lead:
                 lead.opted_out = True
                 lead.opted_out_at = datetime.now(timezone.utc)

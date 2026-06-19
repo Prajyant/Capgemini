@@ -2,17 +2,21 @@
 
 import { useState } from "react";
 import { CSVUploader } from "@/components/leads/CSVUploader";
-import { Database, Upload } from "lucide-react";
+import { DemoSeedPanel } from "@/components/leads/DemoSeedPanel";
+import { Database, Sparkles, Upload } from "lucide-react";
+
+type Tab = "csv" | "demo" | "crm";
 
 export default function ImportPage() {
-  const [tab, setTab] = useState<"csv" | "crm">("csv");
+  const [tab, setTab] = useState<Tab>("csv");
 
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold mb-1">Import Leads</h1>
         <p className="text-sm text-textMuted">
-          Upload a CSV or connect your CRM. Enrichment runs automatically.
+          Upload a CSV, load the demo dataset, or connect your CRM. Enrichment
+          runs automatically.
         </p>
       </div>
 
@@ -27,6 +31,15 @@ export default function ImportPage() {
           CSV Upload
         </button>
         <button
+          onClick={() => setTab("demo")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${
+            tab === "demo" ? "border-accent text-accent" : "border-transparent text-textMuted hover:text-textPrimary"
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          Demo Leads
+        </button>
+        <button
           onClick={() => setTab("crm")}
           className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-2 ${
             tab === "crm" ? "border-accent text-accent" : "border-transparent text-textMuted hover:text-textPrimary"
@@ -38,6 +51,8 @@ export default function ImportPage() {
       </div>
 
       {tab === "csv" && <CSVUploader />}
+
+      {tab === "demo" && <DemoSeedPanel />}
 
       {tab === "crm" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

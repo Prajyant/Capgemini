@@ -13,6 +13,7 @@ celery_app = Celery(
         "app.tasks.enrichment_tasks",
         "app.tasks.reasoning_tasks",
         "app.tasks.feedback_tasks",
+        "app.tasks.sequence_tasks",
     ],
 )
 
@@ -33,12 +34,16 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.reasoning_tasks.process_due_leads",
         "schedule": crontab(minute="*/5"),
     },
+    "progress-sequences-every-2min": {
+        "task": "app.tasks.sequence_tasks.progress_sequences",
+        "schedule": crontab(minute="*/2"),
+    },
     "check-inbox-every-2min": {
         "task": "app.tasks.feedback_tasks.check_inbox_task",
         "schedule": crontab(minute="*/2"),
     },
     "update-strategies-hourly": {
-        "task": "app.tasks.reasoning_tasks.refresh_strategy_metrics",
+        "task": "app.tasks.feedback_tasks.refresh_strategy_metrics",
         "schedule": crontab(minute=0),
     },
     "ab-test-decision-hourly": {

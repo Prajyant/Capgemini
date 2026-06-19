@@ -9,6 +9,14 @@ export function formatRelative(dateStr?: string | null): string {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
   const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+  // Future timestamps (e.g. `next_action_at`) — render as "in Nm/h/d".
+  if (diff < 0) {
+    const abs = -diff;
+    if (abs < 60) return `in ${abs}s`;
+    if (abs < 3600) return `in ${Math.floor(abs / 60)}m`;
+    if (abs < 86400) return `in ${Math.floor(abs / 3600)}h`;
+    return `in ${Math.floor(abs / 86400)}d`;
+  }
   if (diff < 60) return `${diff}s ago`;
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;

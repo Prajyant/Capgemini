@@ -78,6 +78,10 @@ export interface AgentDecision {
   approved_by?: string;
   executed_at?: string;
   created_at: string;
+  // Display helpers populated by the backend.
+  lead_name?: string | null;
+  lead_company?: string | null;
+  lead_email?: string | null;
 }
 
 export interface OverviewKPIs {

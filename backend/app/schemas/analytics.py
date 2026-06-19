@@ -63,6 +63,12 @@ class AgentDecisionOut(BaseModel):
     approved_by: Optional[str] = None
     executed_at: Optional[datetime] = None
     created_at: datetime
+    # Display helpers — populated by the API so the dashboard can show
+    # "Marcus Johnson · Clay" on every decision card without making an
+    # extra round-trip per row.
+    lead_name: Optional[str] = None
+    lead_company: Optional[str] = None
+    lead_email: Optional[str] = None
 
 
 class AgentPerformance(BaseModel):

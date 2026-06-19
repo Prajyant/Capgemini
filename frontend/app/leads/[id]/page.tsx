@@ -13,6 +13,7 @@ import {
   LeadEngagementPanel,
   EngagementEvent,
 } from "@/components/leads/LeadEngagementPanel";
+import { EmailComposer } from "@/components/leads/EmailComposer";
 import { formatRelative } from "@/lib/utils";
 
 export default function LeadDetail() {
@@ -43,8 +44,9 @@ export default function LeadDetail() {
 
   useEffect(() => {
     load();
-    // Auto-refresh every 30 seconds to pick up new replies
-    const interval = setInterval(load, 30000);
+    // Auto-refresh every 60 seconds to pick up new replies. Manual buttons
+    // (Run Reasoning, Check Inbox, Compose Email) refresh immediately.
+    const interval = setInterval(load, 60000);
     return () => clearInterval(interval);
   }, [id]);
 
@@ -58,6 +60,29 @@ export default function LeadDetail() {
       alert("Reasoning failed. Check backend logs.");
     } finally {
       setReasoning(false);
+    }
+  };
+
+  const onApprove = async (decisionId: string) => {
+    try {
+      await api.approveDecision(decisionId);
+      // Reload everything so the new EmailEvent (if Approve sent an email)
+      // appears in Prior Engagement and the chain-of-thought updates.
+      await load();
+    } catch (e: any) {
+      console.error(e);
+      alert(`Approve failed: ${e?.message || e}`);
+    }
+  };
+
+  const onOverride = async (decisionId: string) => {
+    try {
+      await api.overrideDecision(decisionId, "wait");
+      setDecisions((prev) =>
+        prev.map((d) => (d.id === decisionId ? { ...d, was_approved: false, approved_by: "human_override" } : d))
+      );
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -126,10 +151,15 @@ export default function LeadDetail() {
                 {lead.enrichment_score}
               </div>
             </div>
+            <EmailComposer
+              leadId={lead.id}
+              leadEmail={lead.email}
+              onSent={load}
+            />
             <button
               onClick={triggerReasoning}
               disabled={reasoning}
-              className="btn-primary flex items-center gap-2 disabled:opacity-50"
+              className="btn-secondary flex items-center gap-2 disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4" />
               {reasoning ? "Reasoning..." : "Run Agent Reasoning"}
@@ -149,7 +179,7 @@ export default function LeadDetail() {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-textMuted mb-3">
           Lead Profile & Enrichment
         </h2>
-        <LeadEnrichmentView lead={lead} />
+        <LeadEnrichmentView lead={lead} onChanged={load} />
       </section>
 
       {/* Prior Engagement (buyer-side mailbox) */}
@@ -195,6 +225,8 @@ export default function LeadDetail() {
           leadId={id}
           leadEmail={lead.email}
           onEmailSent={load}
+          onApprove={onApprove}
+          onOverride={onOverride}
         />
       </section>
     </div>

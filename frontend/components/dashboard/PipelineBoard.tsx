@@ -23,8 +23,8 @@ export function PipelineBoard() {
     const load = async () => {
       try {
         const [allLeads, recentDecisions] = await Promise.all([
-          api.listLeads({ limit: 200 }),
-          api.listDecisions({ limit: 200 }),
+          api.listLeads({ limit: 100 }),
+          api.listDecisions({ limit: 100 }),
         ]);
         const grouped: Record<string, Lead[]> = {};
         for (const col of COLUMNS) grouped[col.state] = [];
@@ -45,7 +45,10 @@ export function PipelineBoard() {
       }
     };
     load();
-    const i = setInterval(load, 12000);
+    // The dashboard already gets push updates over SSE for new agent
+    // decisions, so this is a slow safety-net poll rather than the primary
+    // refresh path. 30s is plenty.
+    const i = setInterval(load, 30000);
     return () => clearInterval(i);
   }, []);
 

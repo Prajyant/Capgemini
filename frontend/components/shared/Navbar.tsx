@@ -11,8 +11,15 @@ import {
   MessageSquare,
   Search,
   Sparkles,
+  Megaphone,
+  X,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import {
+  getDemoRecipient,
+  setDemoRecipient,
+  onDemoRecipientChange,
+} from "@/lib/demoMode";
 import { formatRelative } from "@/lib/utils";
 
 const LAST_READ_KEY = "notifications:last_read_at";
@@ -38,6 +45,7 @@ export function Navbar() {
         <SearchBox />
       </div>
       <div className="flex items-center gap-3">
+        <DemoRecipientWidget />
         <div className="flex items-center gap-2 px-3 py-1 bg-success/15 text-success rounded-md text-xs font-medium">
           <span className="w-2 h-2 bg-success rounded-full animate-pulse" />
           Agent Active
@@ -45,6 +53,123 @@ export function Navbar() {
         <NotificationsBell />
       </div>
     </header>
+  );
+}
+
+/* ───────────────────  DEMO RECIPIENT OVERRIDE  ──────────────────── */
+
+/**
+ * Lets the presenter route every outgoing email — Compose Email, Approve,
+ * sequence step send — to their own inbox during a live demo. The value
+ * is persisted in localStorage so it survives reloads, and a custom
+ * window event keeps every component in sync without prop drilling.
+ */
+function DemoRecipientWidget() {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const [draft, setDraft] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Hydrate from localStorage and listen for changes (e.g. another tab).
+  useEffect(() => {
+    setValue(getDemoRecipient());
+    const off = onDemoRecipientChange(() => setValue(getDemoRecipient()));
+    return off;
+  }, []);
+
+  useEffect(() => {
+    if (open) setDraft(value);
+  }, [open, value]);
+
+  // Outside-click / Esc closes the popover.
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (!containerRef.current) return;
+      if (!containerRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const active = value.trim().length > 0;
+
+  function save() {
+    setDemoRecipient(draft);
+    setOpen(false);
+  }
+
+  function clear() {
+    setDemoRecipient("");
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition ${
+          active
+            ? "bg-warning/15 text-warning border-warning/40"
+            : "bg-surface2 text-textMuted border-border hover:text-textPrimary"
+        }`}
+        title={
+          active
+            ? `All sends are being redirected to ${value}`
+            : "Set a demo recipient to redirect every send"
+        }
+      >
+        <Megaphone className="w-3.5 h-3.5" />
+        {active ? `Demo → ${value}` : "Demo recipient"}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-1.5 w-80 bg-surface border border-border rounded-md shadow-xl p-3 z-30 space-y-2">
+          <div className="text-sm font-semibold flex items-center justify-between">
+            <span>Demo recipient override</span>
+            <button
+              className="text-textMuted hover:text-textPrimary"
+              onClick={() => setOpen(false)}
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-xs text-textMuted leading-relaxed">
+            When set, every Compose Email / Approve / Send Step will deliver
+            to this address instead of the lead's real email. The lead's
+            timeline still records the event normally.
+          </p>
+          <input
+            type="email"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="you@example.com"
+            className="w-full bg-surface2 border border-border rounded-md px-3 py-1.5 text-sm focus:outline-none focus:border-accent"
+            autoFocus
+          />
+          <div className="flex justify-between gap-2 pt-1">
+            <button
+              onClick={clear}
+              className="btn-ghost text-xs px-3 py-1"
+              disabled={!active && !draft}
+            >
+              Clear
+            </button>
+            <button onClick={save} className="btn-primary text-xs px-3 py-1">
+              Save
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -224,10 +349,10 @@ function NotificationsBell() {
     }
   }, []);
 
-  // Initial load + background refresh
+  // Initial load + slow background refresh (every 60s).
   useEffect(() => {
     load();
-    const id = setInterval(load, 15000);
+    const id = setInterval(load, 60000);
     return () => clearInterval(id);
   }, [load]);
 

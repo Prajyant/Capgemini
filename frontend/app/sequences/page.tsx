@@ -10,6 +10,7 @@ import {
   Loader2,
   Mail,
   Plus,
+  PlayCircle,
   RefreshCw,
   Trash2,
   Workflow,
@@ -101,14 +102,22 @@ export default function SequencesPage() {
             per-lead at runtime from their enrichment context, so no two leads get
             the same copy.
           </p>
+          <p className="text-xs text-textMuted mt-2 max-w-2xl">
+            Once a lead is enrolled in a sequence (via Preview emails → Send),
+            the agent runs every 2 minutes to advance them through the
+            remaining steps automatically when each step's wait time passes.
+          </p>
         </div>
-        <button
-          className="btn-primary flex items-center gap-2 shrink-0"
-          onClick={() => setShowCreate(true)}
-        >
-          <Plus className="w-4 h-4" />
-          New Sequence
-        </button>
+        <div className="flex flex-col gap-2 shrink-0">
+          <button
+            className="btn-primary flex items-center gap-2"
+            onClick={() => setShowCreate(true)}
+          >
+            <Plus className="w-4 h-4" />
+            New Sequence
+          </button>
+          <RunProgressionButton onDone={load} />
+        </div>
       </div>
 
       {loading && (
@@ -715,5 +724,56 @@ function Field({
       </span>
       {children}
     </label>
+  );
+}
+
+/**
+ * Triggers the sequence auto-progression Celery task immediately rather
+ * than waiting for the next 2-minute beat. Critical for live demos where
+ * judges want to see step 2 generate within seconds of step 1 going out.
+ */
+function RunProgressionButton({ onDone }: { onDone: () => void }) {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function run() {
+    setRunning(true);
+    setResult(null);
+    try {
+      const r = await api.progressSequencesNow();
+      setResult(
+        `Advanced ${r?.advanced ?? 0}, completed ${r?.completed ?? 0}, blocked ${r?.blocked ?? 0}`
+      );
+      onDone();
+    } catch (e: any) {
+      setResult(e?.message || "Failed");
+    } finally {
+      setRunning(false);
+      // Auto-clear the result after a few seconds
+      setTimeout(() => setResult(null), 6000);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <button
+        onClick={run}
+        disabled={running}
+        className="btn-ghost flex items-center gap-2 text-xs disabled:opacity-50"
+        title="Trigger the sequence auto-progression task now (skip the 2-minute beat)"
+      >
+        {running ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : (
+          <PlayCircle className="w-3.5 h-3.5" />
+        )}
+        Run progression now
+      </button>
+      {result && (
+        <div className="text-[11px] text-textMuted max-w-[220px] text-right">
+          {result}
+        </div>
+      )}
+    </div>
   );
 }

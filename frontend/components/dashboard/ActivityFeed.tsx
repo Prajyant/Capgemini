@@ -5,7 +5,7 @@ import { api, SSE_URL } from "@/lib/api";
 import { AgentDecision } from "@/lib/types";
 import { DecisionBadge, ConfidenceBar } from "@/components/shared/StatusBadge";
 import { formatRelative } from "@/lib/utils";
-import { Brain, Check, X } from "lucide-react";
+import { Brain, Building2, Check, X, User } from "lucide-react";
 import Link from "next/link";
 
 export function ActivityFeed() {
@@ -45,7 +45,9 @@ export function ActivityFeed() {
       console.warn("SSE unavailable, falling back to polling");
     }
 
-    const interval = setInterval(load, 8000);
+    // SSE drives the live updates; the interval is a slow safety net so
+    // missed events get reconciled within 30s without hammering the API.
+    const interval = setInterval(load, 30000);
     return () => {
       clearInterval(interval);
       evtSource?.close();
@@ -56,18 +58,21 @@ export function ActivityFeed() {
     try {
       await api.approveDecision(id);
       setDecisions((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, was_approved: true } : d))
+        prev.map((d) => (d.id === id ? { ...d, was_approved: true, approved_by: "human" } : d))
       );
-    } catch (e) { console.error(e); }
+    } catch (e: any) {
+      console.error(e);
+      alert(`Approve failed: ${e?.message || e}`);
+    }
   };
 
   const onOverride = async (id: string) => {
     try {
       await api.overrideDecision(id, "wait");
       setDecisions((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, was_approved: false } : d))
+        prev.map((d) => (d.id === id ? { ...d, was_approved: false, approved_by: "human_override" } : d))
       );
-    } catch (e) { console.error(e); }
+    } catch (e: any) { console.error(e); }
   };
 
   return (
@@ -100,9 +105,32 @@ export function ActivityFeed() {
                     {formatRelative(d.created_at)}
                   </span>
                 </div>
+
+                {/* Who is this decision about — always visible so the
+                    presenter knows what they're approving / overriding. */}
+                {(d.lead_name || d.lead_company) && (
+                  <Link
+                    href={`/leads/${d.lead_id}`}
+                    className="flex items-center gap-2 text-xs mb-1.5 hover:text-accent"
+                  >
+                    {d.lead_name && (
+                      <span className="flex items-center gap-1 text-textPrimary font-medium truncate">
+                        <User className="w-3 h-3 text-textMuted shrink-0" />
+                        {d.lead_name}
+                      </span>
+                    )}
+                    {d.lead_company && (
+                      <span className="flex items-center gap-1 text-textMuted truncate">
+                        <Building2 className="w-3 h-3 shrink-0" />
+                        {d.lead_company}
+                      </span>
+                    )}
+                  </Link>
+                )}
+
                 <Link
                   href={`/leads/${d.lead_id}`}
-                  className="text-xs text-textPrimary leading-relaxed hover:text-accent block mb-2"
+                  className="text-xs text-textMuted leading-relaxed hover:text-accent block mb-2"
                 >
                   {d.reasoning_summary}
                 </Link>
@@ -123,6 +151,18 @@ export function ActivityFeed() {
                       <X className="w-3 h-3" />
                       Override
                     </button>
+                  </div>
+                )}
+                {d.was_approved === true && (
+                  <div className="mt-2 text-[11px] text-success flex items-center gap-1">
+                    <Check className="w-3 h-3" />
+                    Approved
+                  </div>
+                )}
+                {d.was_approved === false && (
+                  <div className="mt-2 text-[11px] text-danger flex items-center gap-1">
+                    <X className="w-3 h-3" />
+                    Overridden
                   </div>
                 )}
               </div>

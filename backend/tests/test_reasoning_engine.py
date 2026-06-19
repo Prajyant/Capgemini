@@ -29,16 +29,41 @@ def test_observe_signals_extracts_engagement():
     assert result["behavioral_signals"]["has_replied"] is False
 
 
-def test_assess_context_excludes_email_when_3_sent():
+def test_assess_context_email_always_available_for_active_leads():
+    """
+    The reasoning engine no longer enforces a per-lead email cap inside
+    assess_context — it just lists which channels are valid. The LLM (and
+    the human approver) decide whether sending another email is wise.
+    """
     state = {
         "lead_profile": {"opted_out": False, "linkedin_url": "https://linkedin.com/x"},
         "behavioral_signals": {"emails_sent_count": 3},
         "current_state": "engaged",
     }
     result = assess_context(state)
-    assert "send_email" not in result["available_actions"]
+    assert "send_email" in result["available_actions"]
     assert "send_linkedin_dm" in result["available_actions"]
     assert "wait" in result["available_actions"]
+    assert "close_sequence" in result["available_actions"]
+
+
+def test_assess_context_blocks_email_for_closed_or_optedout():
+    closed = {
+        "lead_profile": {"opted_out": False},
+        "behavioral_signals": {},
+        "current_state": "closed",
+    }
+    assert "send_email" not in assess_context(closed)["available_actions"]
+
+    opted_out = {
+        "lead_profile": {"opted_out": True, "linkedin_url": "https://linkedin.com/x"},
+        "behavioral_signals": {},
+        "current_state": "engaged",
+    }
+    actions = assess_context(opted_out)["available_actions"]
+    assert "send_email" not in actions
+    assert "send_linkedin_dm" not in actions
+    assert "close_sequence" in actions
 
 
 def test_validate_blocks_opted_out():

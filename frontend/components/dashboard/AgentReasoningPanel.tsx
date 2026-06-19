@@ -3,12 +3,50 @@
 import { useState } from "react";
 import { AgentDecision } from "@/lib/types";
 import { DecisionBadge, ConfidenceBar } from "@/components/shared/StatusBadge";
-import { ChevronDown, ChevronUp, Brain } from "lucide-react";
+import { Brain, Building2, Check, ChevronDown, ChevronUp, User, X } from "lucide-react";
 import { formatRelative } from "@/lib/utils";
 
-export function AgentReasoningPanel({ decision }: { decision: AgentDecision }) {
+/**
+ * Renders one chain-of-thought card.
+ *
+ * `onApprove` / `onOverride` are optional: pass them in (typically from
+ * the lead detail page) to show approve / override controls on decisions
+ * that haven't been actioned yet. Without them the card stays read-only
+ * (the dashboard activity feed has its own version of the buttons).
+ */
+export function AgentReasoningPanel({
+  decision,
+  onApprove,
+  onOverride,
+}: {
+  decision: AgentDecision;
+  onApprove?: (id: string) => Promise<void> | void;
+  onOverride?: (id: string) => Promise<void> | void;
+}) {
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
   const r = decision.full_reasoning || {};
+  const awaiting = decision.was_approved == null && !decision.executed_at;
+
+  const handleApprove = async () => {
+    if (!onApprove) return;
+    setBusy(true);
+    try {
+      await onApprove(decision.id);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleOverride = async () => {
+    if (!onOverride) return;
+    setBusy(true);
+    try {
+      await onOverride(decision.id);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="card border-accent/30">
@@ -27,6 +65,23 @@ export function AgentReasoningPanel({ decision }: { decision: AgentDecision }) {
         </span>
       </div>
 
+      {(decision.lead_name || decision.lead_company) && (
+        <div className="flex items-center gap-3 text-xs text-textMuted mb-2">
+          {decision.lead_name && (
+            <span className="flex items-center gap-1 text-textPrimary font-medium">
+              <User className="w-3 h-3 text-textMuted" />
+              {decision.lead_name}
+            </span>
+          )}
+          {decision.lead_company && (
+            <span className="flex items-center gap-1">
+              <Building2 className="w-3 h-3" />
+              {decision.lead_company}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="bg-surface2/70 rounded-md p-3 mb-3 border-l-2 border-accent">
         <div className="text-xs uppercase tracking-wide text-accent mb-1 font-semibold">
           Plain English Summary
@@ -38,6 +93,42 @@ export function AgentReasoningPanel({ decision }: { decision: AgentDecision }) {
         <div className="text-xs text-textMuted mb-1">Confidence</div>
         <ConfidenceBar value={Number(decision.confidence_score)} />
       </div>
+
+      {/* Approve / Override directly on the chain-of-thought card. */}
+      {awaiting && (onApprove || onOverride) && (
+        <div className="flex gap-2 mb-3">
+          {onApprove && (
+            <button
+              onClick={handleApprove}
+              disabled={busy}
+              className="btn-primary text-xs py-1 px-3 flex items-center gap-1 disabled:opacity-50"
+            >
+              <Check className="w-3 h-3" />
+              Approve
+            </button>
+          )}
+          {onOverride && (
+            <button
+              onClick={handleOverride}
+              disabled={busy}
+              className="btn-ghost text-xs py-1 px-3 flex items-center gap-1 disabled:opacity-50"
+            >
+              <X className="w-3 h-3" />
+              Override
+            </button>
+          )}
+        </div>
+      )}
+      {decision.was_approved === true && (
+        <div className="text-xs text-success mb-3 flex items-center gap-1">
+          <Check className="w-3 h-3" /> Approved by {decision.approved_by || "human"}
+        </div>
+      )}
+      {decision.was_approved === false && (
+        <div className="text-xs text-danger mb-3 flex items-center gap-1">
+          <X className="w-3 h-3" /> Overridden by {decision.approved_by || "human"}
+        </div>
+      )}
 
       <button
         onClick={() => setOpen(!open)}
